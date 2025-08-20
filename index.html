@@ -521,8 +521,8 @@
                     x: {
                         display: true,
                         ticks: {
-                            maxRotation: 0,
-                            minRotation: 0,
+                            maxRotation: 45,
+                            minRotation: 45,
                             autoSkip: false,
                             callback: function(value, index, ticks) {
                                 // Always show labels that are not empty
@@ -645,24 +645,24 @@
                 const date = new Date(reading.timestamp);
                 // Show date labels with appropriate frequency and format
                 if (isMobile) {
-                    // Mobile: Show every 20th reading with date and time
-                    if (i % 20 === 0 || i === readings.length - 1) {
+                    // Mobile: Show every 25th reading with compact format
+                    if (i % 25 === 0 || i === readings.length - 1) {
                         return date.toLocaleDateString('en-US', { 
                             month: 'short', 
                             day: 'numeric'
-                        }) + '\n' + date.toLocaleTimeString('en-US', {
+                        }) + ' ' + date.toLocaleTimeString('en-US', {
                             hour: '2-digit',
                             minute: '2-digit'
                         });
                     }
                     return ''; // Empty string for points without labels
                 } else {
-                    // Desktop: Show every 12th reading with full date and time
-                    if (i % 12 === 0 || i === readings.length - 1) {
+                    // Desktop: Show every 15th reading with date and time
+                    if (i % 15 === 0 || i === readings.length - 1) {
                         return date.toLocaleDateString('en-US', { 
                             month: 'short', 
                             day: 'numeric'
-                        }) + '\n' + date.toLocaleTimeString('en-US', {
+                        }) + ' ' + date.toLocaleTimeString('en-US', {
                             hour: '2-digit',
                             minute: '2-digit'
                         });
