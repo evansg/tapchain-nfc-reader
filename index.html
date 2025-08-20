@@ -592,29 +592,89 @@
             }
         });
         
-        // Generate test data
+        // Generate realistic container shipping sensor data
         function loadTestData() {
-            log('Loading test data...', 'info');
-            updateStatus('Loading test data', 'scanning');
+            log('Loading sensor data...', 'info');
+            updateStatus('Loading sensor data', 'scanning');
             
             const testData = [];
             const now = Date.now();
             const intervalMinutes = 10; // 10 minute intervals
+            const daysOfData = 30; // 30 days of data
+            const totalDataPoints = (daysOfData * 24 * 60) / intervalMinutes; // 4320 points for 30 days
             
-            for (let i = 0; i < 200; i++) {
-                const minutesAgo = (199 - i) * intervalMinutes; // Start from 199*10 minutes ago
+            // Container shipping typically has very stable conditions
+            const baseTemp = 22; // Base temperature in Celsius (refrigerated container)
+            const baseHumidity = 65; // Base humidity percentage
+            
+            for (let i = 0; i < totalDataPoints; i++) {
+                const minutesAgo = (totalDataPoints - 1 - i) * intervalMinutes;
+                const timestamp = now - (minutesAgo * 60 * 1000);
+                const date = new Date(timestamp);
+                const hourOfDay = date.getHours();
+                const dayOfMonth = date.getDate();
+                
+                // Temperature variations
+                // Small daily cycle (±1°C) plus very minor random variation
+                // Occasional door opening events cause temporary spikes
+                let temperature = baseTemp;
+                temperature += Math.sin((hourOfDay / 24) * 2 * Math.PI) * 0.8; // Daily cycle
+                temperature += (Math.random() - 0.5) * 0.3; // Random variation
+                
+                // Simulate door opening events (loading/unloading)
+                // Happens roughly every 5-7 days
+                if (i > 0 && i % (Math.floor(Math.random() * 200 + 500)) === 0) {
+                    temperature += Math.random() * 3 + 2; // Spike of 2-5°C
+                }
+                
+                // Gradual drift over the month (simulating slight cooling system degradation)
+                temperature += (i / totalDataPoints) * 0.5;
+                
+                // Humidity variations
+                // Humidity is more stable but follows temperature slightly
+                let humidity = baseHumidity;
+                humidity += Math.sin((hourOfDay / 24) * 2 * Math.PI) * 2; // Small daily cycle
+                humidity += (Math.random() - 0.5) * 1; // Random variation
+                humidity -= (temperature - baseTemp) * 2; // Inverse correlation with temperature
+                
+                // Keep humidity in realistic range
+                humidity = Math.max(40, Math.min(80, humidity));
+                
+                // Light status
+                // Container is mostly dark, light only during loading/unloading
+                // Or brief inspection periods
+                let light = 0;
+                
+                // Simulate loading at start (first 2 hours)
+                if (i < 12) {
+                    light = 1;
+                }
+                // Simulate unloading at end (last 2 hours)
+                else if (i > totalDataPoints - 12) {
+                    light = 1;
+                }
+                // Random brief inspections (very rare)
+                else if (Math.random() < 0.0005) { // 0.05% chance per reading
+                    light = 1;
+                }
+                // Simulate mid-journey inspection (around day 15)
+                else if (i > totalDataPoints/2 - 6 && i < totalDataPoints/2 + 6) {
+                    light = 1;
+                }
+                
                 testData.push({
-                    timestamp: now - (minutesAgo * 60 * 1000), // Convert minutes to milliseconds
-                    temperature: 24 + Math.sin(i/30) * 2,
-                    humidity: 55 + Math.cos(i/25) * 5,
-                    light: i > 50 && i < 55 || i > 150 && i < 155 ? 1 : 0
+                    timestamp: timestamp,
+                    temperature: parseFloat(temperature.toFixed(2)),
+                    humidity: parseFloat(humidity.toFixed(2)),
+                    light: light
                 });
             }
             
             // Log first and last timestamps for verification
             const firstDate = new Date(testData[0].timestamp);
             const lastDate = new Date(testData[testData.length - 1].timestamp);
-            log(`Data spans from ${firstDate.toLocaleString()} to ${lastDate.toLocaleString()}`, 'info');
+            log(`Data spans ${daysOfData} days: ${firstDate.toLocaleDateString()} to ${lastDate.toLocaleDateString()}`, 'info');
+            log(`Total readings: ${testData.length.toLocaleString()} (every ${intervalMinutes} minutes)`, 'info');
             
             displayData(testData);
             log('Data loaded successfully', 'success');
@@ -641,12 +701,23 @@
             // Update chart with responsive date labels
             const isMobile = window.innerWidth < 768;
             
+            // For large datasets, show fewer labels
+            const labelInterval = readings.length > 1000 ? 
+                (isMobile ? Math.floor(readings.length / 10) : Math.floor(readings.length / 20)) : 
+                (isMobile ? 25 : 15);
+            
             const labels = readings.map((reading, i) => {
                 const date = new Date(reading.timestamp);
-                // Show date labels with appropriate frequency and format
-                if (isMobile) {
-                    // Mobile: Show every 25th reading with compact format
-                    if (i % 25 === 0 || i === readings.length - 1) {
+                // Show date labels at calculated intervals
+                if (i % labelInterval === 0 || i === readings.length - 1 || i === 0) {
+                    if (readings.length > 1000) {
+                        // For month-long data, just show date
+                        return date.toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric'
+                        });
+                    } else {
+                        // For shorter periods, show date and time
                         return date.toLocaleDateString('en-US', { 
                             month: 'short', 
                             day: 'numeric'
@@ -655,20 +726,8 @@
                             minute: '2-digit'
                         });
                     }
-                    return ''; // Empty string for points without labels
-                } else {
-                    // Desktop: Show every 15th reading with date and time
-                    if (i % 15 === 0 || i === readings.length - 1) {
-                        return date.toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric'
-                        }) + ' ' + date.toLocaleTimeString('en-US', {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                        });
-                    }
-                    return ''; // Empty string for points without labels
                 }
+                return ''; // Empty string for points without labels
             });
             
             chart.data.labels = labels;
