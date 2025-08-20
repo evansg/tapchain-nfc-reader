@@ -643,8 +643,8 @@
             }
             
             displayData(testData);
-            log('Test data loaded successfully', 'success');
-            updateStatus('Test data loaded', 'connected');
+            log('Data loaded successfully', 'success');
+            updateStatus('Data loaded correctly', 'connected');
         }
         
         // Display data in UI
@@ -664,25 +664,33 @@
             document.getElementById('lightValue').textContent = latest.light ? 'Bright' : 'Dark';
             document.getElementById('dataCount').textContent = readings.length;
             
-            // Update chart with mobile-friendly data
+            // Update chart with responsive date labels
             const isMobile = window.innerWidth < 768;
-            const labelInterval = isMobile ? 40 : 20; // Show fewer labels on mobile
             
             const labels = readings.map((reading, i) => {
-                if (i % labelInterval === 0 || i === readings.length - 1) {
-                    const date = new Date(reading.timestamp);
-                    // Shorter format for mobile
-                    if (isMobile) {
+                const date = new Date(reading.timestamp);
+                // Show date labels with appropriate frequency and format
+                if (isMobile) {
+                    // Mobile: Show every 25th reading with compact format
+                    if (i % 25 === 0 || i === readings.length - 1) {
+                        return date.toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric'
+                        });
+                    }
+                    return ''; // Empty string for points without labels
+                } else {
+                    // Desktop: Show every 15th reading with full format
+                    if (i % 15 === 0 || i === readings.length - 1) {
                         return date.toLocaleDateString('en-US', { 
                             month: 'short', 
                             day: 'numeric',
-                            hour: '2-digit'
+                            hour: '2-digit',
+                            minute: '2-digit'
                         });
-                    } else {
-                        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
                     }
+                    return ''; // Empty string for points without labels
                 }
-                return '';
             });
             
             chart.data.labels = labels;
@@ -1028,13 +1036,14 @@
         document.getElementById('scanBtn').addEventListener('click', () => {
             // For iOS devices, clicking scan button should load data (simulating second tap)
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-            if (isIOS && currentData.length === 0) {
-                log('📱 iOS: Loading sensor data...', 'info');
+            if (isIOS) {
+                log('📱 iOS: Simulating second tap - loading sensor data...', 'info');
                 updateStatus('Loading sensor data', 'scanning');
                 loadTestData();
             } else {
-                // For Android, start NFC scanning
-                scanNFC();
+                // For Android, start NFC scanning (but they should use actual NFC tap)
+                log('Android: Use NFC tap instead of button', 'info');
+                updateStatus('Please tap device with NFC', 'scanning');
             }
         });
         document.getElementById('exportBtn').addEventListener('click', exportCSV);
