@@ -423,9 +423,18 @@
         <div class="chart-container">
             <div class="chart-header">
                 <h3 class="chart-title">Sensor Data Timeline</h3>
+                <div class="chart-controls">
+                    <button id="resetZoomBtn" class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                        <i class="fas fa-search-minus"></i>
+                        Reset Zoom
+                    </button>
+                </div>
             </div>
             <div style="position: relative; height: 300px; width: 100%;">
                 <canvas id="dataChart"></canvas>
+            </div>
+            <div class="zoom-info" style="font-size: 0.8rem; color: #6b7280; margin-top: 0.5rem; text-align: center;">
+                💡 Mouse wheel to zoom • Click and drag to pan • Pinch to zoom on mobile
             </div>
         </div>
         
@@ -435,6 +444,8 @@
     
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js Zoom Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <!-- jsPDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
@@ -493,6 +504,7 @@
                     }
                 ]
             },
+            plugins: [window.ChartZoom],
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -515,6 +527,22 @@
                     tooltip: {
                         enabled: true,
                         mode: 'index'
+                    },
+                    zoom: {
+                        pan: {
+                            enabled: true,
+                            mode: 'x',
+                            modifierKey: null
+                        },
+                        zoom: {
+                            wheel: {
+                                enabled: true,
+                            },
+                            pinch: {
+                                enabled: true
+                            },
+                            mode: 'x'
+                        }
                     }
                 },
                 scales: {
@@ -592,7 +620,7 @@
             }
         });
         
-        // Generate realistic container shipping sensor data
+        // Generate realistic reefer container sensor data
         function loadTestData() {
             log('Loading sensor data...', 'info');
             updateStatus('Loading sensor data', 'scanning');
@@ -603,64 +631,85 @@
             const daysOfData = 30; // 30 days of data
             const totalDataPoints = (daysOfData * 24 * 60) / intervalMinutes; // 4320 points for 30 days
             
-            // Container shipping typically has very stable conditions
-            const baseTemp = 22; // Base temperature in Celsius (refrigerated container)
-            const baseHumidity = 65; // Base humidity percentage
+            // Reefer container phases
+            const loadingPhase = Math.floor(totalDataPoints * 0.02); // First 2% (loading)
+            const coolingPhase = Math.floor(totalDataPoints * 0.08); // Next 8% (cooling down)
+            const stablePhase = Math.floor(totalDataPoints * 0.85); // 85% stable transport
+            const unloadingPhase = totalDataPoints - loadingPhase - coolingPhase - stablePhase; // Final phase
+            
+            const ambientTemp = 25; // Ambient temperature during loading
+            const targetTemp = -5; // Target reefer temperature
+            const baseHumidity = 85; // High humidity in reefer
             
             for (let i = 0; i < totalDataPoints; i++) {
                 const minutesAgo = (totalDataPoints - 1 - i) * intervalMinutes;
                 const timestamp = now - (minutesAgo * 60 * 1000);
                 const date = new Date(timestamp);
-                const hourOfDay = date.getHours();
-                const dayOfMonth = date.getDate();
                 
-                // Temperature variations
-                // Small daily cycle (±1°C) plus very minor random variation
-                // Occasional door opening events cause temporary spikes
-                let temperature = baseTemp;
-                temperature += Math.sin((hourOfDay / 24) * 2 * Math.PI) * 0.8; // Daily cycle
-                temperature += (Math.random() - 0.5) * 0.3; // Random variation
+                let temperature, humidity, light = 0;
                 
-                // Simulate door opening events (loading/unloading)
-                // Happens roughly every 5-7 days
-                if (i > 0 && i % (Math.floor(Math.random() * 200 + 500)) === 0) {
-                    temperature += Math.random() * 3 + 2; // Spike of 2-5°C
+                // Phase 1: Loading (doors open, ambient temperature)
+                if (i < loadingPhase) {
+                    temperature = ambientTemp + (Math.random() - 0.5) * 3; // ±1.5°C variation
+                    humidity = 60 + (Math.random() - 0.5) * 20; // 50-70% during loading
+                    light = 1; // Lights on during loading
+                }
+                // Phase 2: Cooling down (doors closed, temperature dropping)
+                else if (i < loadingPhase + coolingPhase) {
+                    const coolingProgress = (i - loadingPhase) / coolingPhase;
+                    // Exponential cooling curve - realistic refrigeration
+                    const coolingRate = 1 - Math.exp(-coolingProgress * 3);
+                    temperature = ambientTemp - (ambientTemp - targetTemp) * coolingRate;
+                    temperature += (Math.random() - 0.5) * 1; // ±0.5°C variation during cooling
+                    
+                    humidity = 60 + (25 * coolingProgress) + (Math.random() - 0.5) * 5; // Humidity rises as cooling
+                    light = 0; // Dark during cooling
+                }
+                // Phase 3: Stable transport (maintaining target temperature)
+                else if (i < loadingPhase + coolingPhase + stablePhase) {
+                    temperature = targetTemp;
+                    
+                    // Minor temperature variations due to:
+                    // - Compressor cycling
+                    const cycleHours = ((i * intervalMinutes) / 60) % 2; // 2-hour compressor cycle
+                    temperature += Math.sin(cycleHours * Math.PI) * 0.3; // ±0.3°C compressor cycle
+                    
+                    // - External temperature influence (very minor in good reefer)
+                    const timeOfDay = date.getHours();
+                    temperature += Math.sin((timeOfDay / 24) * 2 * Math.PI) * 0.15; // ±0.15°C daily variation
+                    
+                    // - Random sensor noise
+                    temperature += (Math.random() - 0.5) * 0.2; // ±0.1°C sensor noise
+                    
+                    // Occasional defrost cycles (every 6-8 hours)
+                    const hoursSinceStart = (i * intervalMinutes) / 60;
+                    if (hoursSinceStart % (6 + Math.random() * 2) < 0.5) {
+                        temperature += Math.random() * 2 + 1; // +1 to +3°C during defrost
+                    }
+                    
+                    humidity = baseHumidity + (Math.random() - 0.5) * 5; // ±2.5% variation
+                    light = 0; // Dark during transport
+                    
+                    // Random inspection (very rare)
+                    if (Math.random() < 0.0003) {
+                        light = 1;
+                        temperature += Math.random() * 2; // Brief temperature rise during inspection
+                    }
+                }
+                // Phase 4: Unloading (doors open, temperature rising)
+                else {
+                    const unloadingProgress = (i - loadingPhase - coolingPhase - stablePhase) / unloadingPhase;
+                    // Temperature rises when doors open
+                    const warmingRate = Math.min(1, unloadingProgress * 2); // Faster initial warming
+                    temperature = targetTemp + (ambientTemp - targetTemp) * warmingRate;
+                    temperature += (Math.random() - 0.5) * 2; // ±1°C variation during unloading
+                    
+                    humidity = baseHumidity - (25 * unloadingProgress) + (Math.random() - 0.5) * 10; // Humidity drops as warming
+                    light = 1; // Lights on during unloading
                 }
                 
-                // Gradual drift over the month (simulating slight cooling system degradation)
-                temperature += (i / totalDataPoints) * 0.5;
-                
-                // Humidity variations
-                // Humidity is more stable but follows temperature slightly
-                let humidity = baseHumidity;
-                humidity += Math.sin((hourOfDay / 24) * 2 * Math.PI) * 2; // Small daily cycle
-                humidity += (Math.random() - 0.5) * 1; // Random variation
-                humidity -= (temperature - baseTemp) * 2; // Inverse correlation with temperature
-                
-                // Keep humidity in realistic range
-                humidity = Math.max(40, Math.min(80, humidity));
-                
-                // Light status
-                // Container is mostly dark, light only during loading/unloading
-                // Or brief inspection periods
-                let light = 0;
-                
-                // Simulate loading at start (first 2 hours)
-                if (i < 12) {
-                    light = 1;
-                }
-                // Simulate unloading at end (last 2 hours)
-                else if (i > totalDataPoints - 12) {
-                    light = 1;
-                }
-                // Random brief inspections (very rare)
-                else if (Math.random() < 0.0005) { // 0.05% chance per reading
-                    light = 1;
-                }
-                // Simulate mid-journey inspection (around day 15)
-                else if (i > totalDataPoints/2 - 6 && i < totalDataPoints/2 + 6) {
-                    light = 1;
-                }
+                // Keep values in realistic ranges
+                humidity = Math.max(30, Math.min(95, humidity));
                 
                 testData.push({
                     timestamp: timestamp,
@@ -673,8 +722,8 @@
             // Log first and last timestamps for verification
             const firstDate = new Date(testData[0].timestamp);
             const lastDate = new Date(testData[testData.length - 1].timestamp);
-            log(`Data spans ${daysOfData} days: ${firstDate.toLocaleDateString()} to ${lastDate.toLocaleDateString()}`, 'info');
-            log(`Total readings: ${testData.length.toLocaleString()} (every ${intervalMinutes} minutes)`, 'info');
+            log(`Reefer container data: ${firstDate.toLocaleDateString()} to ${lastDate.toLocaleDateString()}`, 'info');
+            log(`${testData.length.toLocaleString()} readings: Loading → Cooling → Transport → Unloading`, 'info');
             
             displayData(testData);
             log('Data loaded successfully', 'success');
@@ -1080,6 +1129,10 @@
         });
         document.getElementById('exportBtn').addEventListener('click', exportCSV);
         document.getElementById('exportPdfBtn').addEventListener('click', exportPDF);
+        document.getElementById('resetZoomBtn').addEventListener('click', () => {
+            chart.resetZoom();
+            log('Chart zoom reset', 'info');
+        });
         
         // Auto-start NFC scan on page load
         window.addEventListener('DOMContentLoaded', () => {
