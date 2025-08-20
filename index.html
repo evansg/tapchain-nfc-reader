@@ -727,22 +727,18 @@
                 // Show helpful message for iOS users
                 if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
                     log('📱 iOS device detected', 'info');
-                    updateStatus('Tap device again to load data', 'scanning');
+                    updateStatus('Tap device to load data', 'scanning');
                     
-                    // Wait for user to manually tap the "Scan NFC Device" button
-                    // or simulate a second tap after a delay
-                    setTimeout(() => {
-                        log('📱 Simulating second tap - loading sensor data...', 'info');
-                        updateStatus('Loading sensor data', 'scanning');
-                        loadTestData();
-                    }, 5000);  // Give user time to potentially tap manually first
+                    // For iOS, we need to wait for the user to manually tap the "Scan NFC Device" button
+                    // since iOS doesn't support Web NFC API - the button will load test data
+                    log('💡 iOS: Use "Scan NFC Device" button to simulate data transfer', 'info');
                 }
                 return;
             }
             
             try {
-                log('Starting NFC scan...', 'info');
-                updateStatus('Scanning for device', 'scanning');
+                log('NFC scanner ready', 'info');
+                updateStatus('Tap device to load data', 'scanning');
                 
                 // Clean up any existing reader
                 if (nfcReader) {
@@ -756,8 +752,6 @@
                 
                 nfcReader = new NDEFReader();
                 await nfcReader.scan();
-                
-                log('NFC scanner activated - waiting for second tap to transfer data', 'info');
                 
                 nfcReader.addEventListener("reading", ({ message, serialNumber }) => {
                     log(`Device detected: ${serialNumber}`, 'success');
@@ -829,89 +823,220 @@
             log(`CSV exported: ${filename} (${currentData.length} records)`, 'success');
         }
         
-        // Export to PDF
+        // Export to PDF - Modern Design with All Data Points
         function exportPDF() {
             if (!currentData || currentData.length === 0) {
                 log('No data available to export', 'error');
                 return;
             }
             
-            log('Exporting data to PDF...', 'info');
+            log('Exporting comprehensive PDF report...', 'info');
             
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
+            const pageWidth = doc.internal.pageSize.width;
+            const pageHeight = doc.internal.pageSize.height;
             
-            // Add title
-            doc.setFontSize(20);
-            doc.text('TapChain Sensor Data Report', 20, 20);
+            // Modern color scheme
+            const primaryColor = [99, 102, 241]; // #6366f1
+            const secondaryColor = [107, 114, 128]; // #6b7280
+            const lightGray = [243, 244, 246]; // #f3f4f6
             
-            // Add summary
+            // PAGE 1: Title & Summary
+            // Header with gradient-like effect
+            doc.setFillColor(...primaryColor);
+            doc.rect(0, 0, pageWidth, 40, 'F');
+            
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(28);
+            doc.setFont(undefined, 'bold');
+            doc.text('TapChain', 20, 25);
+            doc.setFontSize(16);
+            doc.setFont(undefined, 'normal');
+            doc.text('Environmental Monitoring Report', 20, 32);
+            
+            // Reset colors for body
+            doc.setTextColor(0, 0, 0);
+            
+            // Summary section with modern card design
             const latest = currentData[currentData.length - 1];
             const oldest = currentData[0];
+            const tempAvg = currentData.reduce((sum, r) => sum + r.temperature, 0) / currentData.length;
+            const humAvg = currentData.reduce((sum, r) => sum + r.humidity, 0) / currentData.length;
+            const lightOnTime = currentData.filter(r => r.light).length;
             
-            doc.setFontSize(12);
-            doc.text(`Report Generated: ${new Date().toLocaleDateString()}`, 20, 35);
-            doc.text(`Data Period: ${new Date(oldest.timestamp).toLocaleDateString()} - ${new Date(latest.timestamp).toLocaleDateString()}`, 20, 45);
-            doc.text(`Total Data Points: ${currentData.length}`, 20, 55);
+            // Summary cards
+            let cardY = 50;
             
-            // Add current readings
+            // Card background
+            doc.setFillColor(...lightGray);
+            doc.roundedRect(15, cardY, pageWidth - 30, 85, 3, 3, 'F');
+            
+            doc.setFontSize(18);
+            doc.setFont(undefined, 'bold');
+            doc.setTextColor(...primaryColor);
+            doc.text('Data Summary', 25, cardY + 15);
+            
+            doc.setFontSize(11);
+            doc.setTextColor(...secondaryColor);
+            doc.setFont(undefined, 'normal');
+            
+            const summaryData = [
+                [`Report Generated:`, new Date().toLocaleDateString('en-US', { 
+                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+                })],
+                [`Monitoring Period:`, `${new Date(oldest.timestamp).toLocaleDateString()} - ${new Date(latest.timestamp).toLocaleDateString()}`],
+                [`Total Data Points:`, `${currentData.length.toLocaleString()} readings`],
+                [`Sampling Interval:`, '10 minutes'],
+                [`Average Temperature:`, `${tempAvg.toFixed(1)}°C`],
+                [`Average Humidity:`, `${humAvg.toFixed(1)}%`],
+                [`Light Active Time:`, `${lightOnTime} readings (${(lightOnTime/currentData.length*100).toFixed(1)}%)`]
+            ];
+            
+            summaryData.forEach((item, index) => {
+                const yPos = cardY + 25 + (index * 8);
+                doc.setFont(undefined, 'bold');
+                doc.text(item[0], 25, yPos);
+                doc.setFont(undefined, 'normal');
+                doc.text(item[1], 85, yPos);
+            });
+            
+            // Current readings section
+            cardY = 150;
+            doc.setFillColor(...lightGray);
+            doc.roundedRect(15, cardY, pageWidth - 30, 40, 3, 3, 'F');
+            
+            doc.setFontSize(18);
+            doc.setFont(undefined, 'bold');
+            doc.setTextColor(...primaryColor);
+            doc.text('Latest Readings', 25, cardY + 15);
+            
             doc.setFontSize(14);
-            doc.text('Current Readings:', 20, 75);
-            doc.setFontSize(12);
-            doc.text(`Temperature: ${latest.temperature.toFixed(1)}°C`, 25, 85);
-            doc.text(`Humidity: ${latest.humidity.toFixed(1)}%`, 25, 95);
-            doc.text(`Light Status: ${latest.light ? 'Bright' : 'Dark'}`, 25, 105);
+            doc.setTextColor(0, 0, 0);
+            doc.setFont(undefined, 'bold');
+            doc.text(`${latest.temperature.toFixed(1)}°C`, 25, cardY + 28);
+            doc.text(`${latest.humidity.toFixed(1)}%`, 80, cardY + 28);
+            doc.text(`${latest.light ? 'Bright' : 'Dark'}`, 130, cardY + 28);
             
-            // Add chart image
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'normal');
+            doc.setTextColor(...secondaryColor);
+            doc.text('Temperature', 25, cardY + 35);
+            doc.text('Humidity', 80, cardY + 35);
+            doc.text('Light Status', 130, cardY + 35);
+            
+            // Add chart
             const canvas = document.getElementById('dataChart');
             const chartImage = canvas.toDataURL('image/png');
-            doc.addImage(chartImage, 'PNG', 20, 120, 170, 85);
+            doc.addImage(chartImage, 'PNG', 15, 200, pageWidth - 30, 80);
             
-            // Add data table on new page
+            // PAGE 2+: Complete Data Table
             doc.addPage();
-            doc.setFontSize(14);
-            doc.text('Detailed Data:', 20, 20);
+            
+            // Modern table header
+            doc.setFillColor(...primaryColor);
+            doc.rect(0, 0, pageWidth, 25, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(16);
+            doc.setFont(undefined, 'bold');
+            doc.text('Complete Data Log', 20, 16);
+            
+            // Table setup
+            const startY = 35;
+            const rowHeight = 6;
+            const colWidths = [35, 35, 25, 25, 30, 25];
+            const colPositions = [15, 50, 85, 110, 135, 165];
+            const headers = ['Date', 'Time', 'Temp (°C)', 'Hum (%)', 'Light', 'Reading #'];
             
             // Table headers
+            doc.setFillColor(...lightGray);
+            doc.rect(15, startY - 5, pageWidth - 30, rowHeight + 2, 'F');
+            doc.setTextColor(0, 0, 0);
             doc.setFontSize(10);
-            doc.text('Date', 20, 35);
-            doc.text('Time', 55, 35);
-            doc.text('Temp (°C)', 90, 35);
-            doc.text('Humidity (%)', 125, 35);
-            doc.text('Light', 165, 35);
+            doc.setFont(undefined, 'bold');
             
-            // Table data (show first 30 entries to fit on page)
-            let y = 45;
-            const maxEntries = Math.min(30, currentData.length);
+            headers.forEach((header, i) => {
+                doc.text(header, colPositions[i], startY);
+            });
             
-            for (let i = 0; i < maxEntries; i++) {
-                const reading = currentData[i];
+            // Table data - ALL DATA POINTS
+            doc.setFont(undefined, 'normal');
+            doc.setFontSize(9);
+            
+            let currentY = startY + rowHeight + 2;
+            let pageCount = 2;
+            
+            currentData.forEach((reading, index) => {
+                // Check if we need a new page
+                if (currentY > pageHeight - 20) {
+                    doc.addPage();
+                    pageCount++;
+                    
+                    // Add page header
+                    doc.setFillColor(...primaryColor);
+                    doc.rect(0, 0, pageWidth, 20, 'F');
+                    doc.setTextColor(255, 255, 255);
+                    doc.setFontSize(12);
+                    doc.setFont(undefined, 'bold');
+                    doc.text(`TapChain Data Log - Page ${pageCount}`, 20, 13);
+                    
+                    // Reset for data
+                    doc.setTextColor(0, 0, 0);
+                    doc.setFont(undefined, 'normal');
+                    doc.setFontSize(9);
+                    currentY = 30;
+                }
+                
+                // Alternating row colors
+                if (index % 2 === 0) {
+                    doc.setFillColor(248, 250, 252);
+                    doc.rect(15, currentY - 3, pageWidth - 30, rowHeight, 'F');
+                }
+                
                 const date = new Date(reading.timestamp);
+                const rowData = [
+                    date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                    reading.temperature.toFixed(1),
+                    reading.humidity.toFixed(1),
+                    reading.light ? 'Bright' : 'Dark',
+                    (index + 1).toString()
+                ];
                 
-                doc.text(date.toLocaleDateString(), 20, y);
-                doc.text(date.toLocaleTimeString(), 55, y);
-                doc.text(reading.temperature.toFixed(1), 90, y);
-                doc.text(reading.humidity.toFixed(1), 125, y);
-                doc.text(reading.light ? 'Bright' : 'Dark', 165, y);
+                rowData.forEach((data, i) => {
+                    doc.text(data, colPositions[i], currentY);
+                });
                 
-                y += 7;
-                if (y > 280) break; // Page limit
-            }
+                currentY += rowHeight;
+            });
             
-            if (currentData.length > maxEntries) {
-                doc.text(`... and ${currentData.length - maxEntries} more entries`, 20, y + 10);
-            }
+            // Footer on last page
+            doc.setFontSize(8);
+            doc.setTextColor(...secondaryColor);
+            doc.text(`Generated by TapChain Dashboard | Total Pages: ${pageCount} | Data Points: ${currentData.length}`, 
+                     20, pageHeight - 10);
             
             // Generate filename and save
             const now = new Date();
-            const filename = `tapchain_report_${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}.pdf`;
+            const filename = `TapChain_Report_${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}.pdf`;
             doc.save(filename);
             
-            log(`PDF exported: ${filename}`, 'success');
+            log(`Modern PDF exported: ${filename} (${pageCount} pages, ${currentData.length} data points)`, 'success');
         }
         
         // Event listeners
-        document.getElementById('scanBtn').addEventListener('click', scanNFC);
+        document.getElementById('scanBtn').addEventListener('click', () => {
+            // For iOS devices, clicking scan button should load data (simulating second tap)
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            if (isIOS && currentData.length === 0) {
+                log('📱 iOS: Loading sensor data...', 'info');
+                updateStatus('Loading sensor data', 'scanning');
+                loadTestData();
+            } else {
+                // For Android, start NFC scanning
+                scanNFC();
+            }
+        });
         document.getElementById('exportBtn').addEventListener('click', exportCSV);
         document.getElementById('exportPdfBtn').addEventListener('click', exportPDF);
         
