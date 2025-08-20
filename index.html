@@ -599,15 +599,22 @@
             
             const testData = [];
             const now = Date.now();
+            const intervalMinutes = 10; // 10 minute intervals
             
             for (let i = 0; i < 200; i++) {
+                const minutesAgo = (199 - i) * intervalMinutes; // Start from 199*10 minutes ago
                 testData.push({
-                    timestamp: now - (200 - i) * 10 * 60000, // 10 min intervals
+                    timestamp: now - (minutesAgo * 60 * 1000), // Convert minutes to milliseconds
                     temperature: 24 + Math.sin(i/30) * 2,
                     humidity: 55 + Math.cos(i/25) * 5,
                     light: i > 50 && i < 55 || i > 150 && i < 155 ? 1 : 0
                 });
             }
+            
+            // Log first and last timestamps for verification
+            const firstDate = new Date(testData[0].timestamp);
+            const lastDate = new Date(testData[testData.length - 1].timestamp);
+            log(`Data spans from ${firstDate.toLocaleString()} to ${lastDate.toLocaleString()}`, 'info');
             
             displayData(testData);
             log('Data loaded successfully', 'success');
