@@ -743,22 +743,34 @@
                 log('Starting NFC scan...', 'info');
                 updateStatus('Scanning for device', 'scanning');
                 
-                const ndef = new NDEFReader();
-                await ndef.scan();
+                // Clean up any existing reader
+                if (nfcReader) {
+                    try {
+                        nfcReader.removeEventListener("reading");
+                        nfcReader.removeEventListener("readingerror");
+                    } catch (e) {
+                        // Ignore cleanup errors
+                    }
+                }
+                
+                nfcReader = new NDEFReader();
+                await nfcReader.scan();
                 
                 log('NFC scanner activated - bring device close', 'info');
                 
-                ndef.addEventListener("reading", ({ message, serialNumber }) => {
+                nfcReader.addEventListener("reading", ({ message, serialNumber }) => {
                     log(`Device detected: ${serialNumber}`, 'success');
                     
                     // For now, load test data when NFC is detected
                     // In production, this would parse actual NFC data
                     log('Device tapped - loading sensor data...', 'info');
+                    updateStatus('Loading sensor data', 'scanning');
                     loadTestData();
                 });
                 
-                ndef.addEventListener("readingerror", () => {
+                nfcReader.addEventListener("readingerror", () => {
                     log('NFC reading error', 'error');
+                    updateStatus('NFC error', 'error');
                 });
                 
             } catch (error) {
@@ -769,6 +781,7 @@
         
         // Store data globally for export
         let currentData = [];
+        let nfcReader = null;
         
         // Export to CSV
         function exportCSV() {
@@ -900,9 +913,6 @@
         document.getElementById('scanBtn').addEventListener('click', scanNFC);
         document.getElementById('exportBtn').addEventListener('click', exportCSV);
         document.getElementById('exportPdfBtn').addEventListener('click', exportPDF);
-        document.getElementById('clearConsole').addEventListener('click', () => {
-            document.getElementById('console').innerHTML = '[SYSTEM] Console cleared<br>';
-        });
         
         // Chart control buttons
         document.querySelectorAll('.chart-btn').forEach(btn => {
@@ -915,21 +925,15 @@
         
         // Auto-start NFC scan on page load
         window.addEventListener('DOMContentLoaded', () => {
-            log('Dashboard ready - checking NFC compatibility', 'info');
+            log('Dashboard ready - device was tapped to open page', 'info');
             
-            const nfcCheck = checkNFCSupport();
-            if (nfcCheck.supported) {
-                log('NFC supported - starting automatic scan', 'success');
-                setTimeout(() => {
-                    scanNFC();
-                }, 1000);
-            } else {
-                log(`Device limitation: ${nfcCheck.reason}`, 'info');
-                // Auto-start will still trigger scanNFC which handles the incompatibility
-                setTimeout(() => {
-                    scanNFC();
-                }, 1000);
-            }
+            // Since the page was opened by tapping the NFC device, 
+            // immediately load the sensor data
+            setTimeout(() => {
+                log('Device tapped - loading sensor data...', 'info');
+                updateStatus('Loading sensor data', 'scanning');
+                loadTestData();
+            }, 1000);
         });
     </script>
 </body>
