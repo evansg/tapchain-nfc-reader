@@ -500,10 +500,6 @@
                 <i class="fas fa-wifi"></i>
                 Scan NFC Device
             </button>
-            <button id="testBtn" class="btn btn-secondary">
-                <i class="fas fa-vial"></i>
-                Load Test Data
-            </button>
             <button id="exportBtn" class="btn btn-secondary">
                 <i class="fas fa-download"></i>
                 Export CSV
@@ -572,16 +568,30 @@
                     {
                         label: 'Temperature (°C)',
                         data: [],
-                        borderColor: '#6366f1',
-                        backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                        tension: 0.4
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        tension: 0.4,
+                        borderWidth: 2,
+                        yAxisID: 'y'
                     },
                     {
                         label: 'Humidity (%)',
                         data: [],
-                        borderColor: '#8b5cf6',
-                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                        tension: 0.4
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        borderWidth: 2,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Light Status',
+                        data: [],
+                        borderColor: '#fbbf24',
+                        backgroundColor: 'rgba(251, 191, 36, 0.2)',
+                        tension: 0.1,
+                        borderWidth: 3,
+                        yAxisID: 'y1',
+                        stepped: true
                     }
                 ]
             },
@@ -623,12 +633,48 @@
                         }
                     },
                     y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
                         beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: 'Temperature (°C) / Humidity (%)',
+                            font: {
+                                size: 10
+                            }
+                        },
                         ticks: {
                             font: {
                                 size: 10
                             }
                         }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        min: 0,
+                        max: 1,
+                        title: {
+                            display: true,
+                            text: 'Light (0=Dark, 1=Bright)',
+                            font: {
+                                size: 10
+                            }
+                        },
+                        ticks: {
+                            stepSize: 1,
+                            callback: function(value) {
+                                return value === 1 ? 'Bright' : 'Dark';
+                            },
+                            font: {
+                                size: 10
+                            }
+                        },
+                        grid: {
+                            drawOnChartArea: false,
+                        },
                     }
                 },
                 elements: {
@@ -672,6 +718,9 @@
                 return;
             }
             
+            // Store data globally for CSV export
+            currentData = readings;
+            
             // Update stats
             const latest = readings[readings.length - 1];
             document.getElementById('tempValue').textContent = `${latest.temperature.toFixed(1)}°C`;
@@ -703,16 +752,54 @@
             chart.data.labels = labels;
             chart.data.datasets[0].data = readings.map(r => r.temperature);
             chart.data.datasets[1].data = readings.map(r => r.humidity);
+            chart.data.datasets[2].data = readings.map(r => r.light);
             chart.update();
             
             log(`Displayed ${readings.length} data points`, 'success');
         }
         
+        // Check device and browser support
+        function checkNFCSupport() {
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+            
+            if (isIOS) {
+                return {
+                    supported: false,
+                    reason: 'iOS devices use native NFC reading. Please use a compatible Android browser.'
+                };
+            }
+            
+            if (!('NDEFReader' in window)) {
+                return {
+                    supported: false,
+                    reason: 'Web NFC API not supported. Try using Chrome on Android.'
+                };
+            }
+            
+            return { supported: true };
+        }
+        
         // NFC Reading
         async function scanNFC() {
-            if (!('NDEFReader' in window)) {
-                log('Web NFC not supported on this device', 'error');
-                updateStatus('NFC not supported', 'error');
+            const nfcCheck = checkNFCSupport();
+            
+            if (!nfcCheck.supported) {
+                log(nfcCheck.reason, 'error');
+                updateStatus('Incompatible device/browser', 'error');
+                
+                // Show helpful message for iOS users
+                if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+                    log('📱 For iOS: Tap device with phone, then manually open this webpage', 'info');
+                    log('🔗 URL: https://evansg.github.io/tapchain-nfc-reader/', 'info');
+                    updateStatus('iOS: Tap device then open webpage manually', 'error');
+                    
+                    // Automatically load test data for iOS users to show functionality
+                    setTimeout(() => {
+                        loadTestData();
+                        log('📊 Loaded demo data to show functionality', 'info');
+                    }, 3000);
+                }
                 return;
             }
             
@@ -744,16 +831,56 @@
             }
         }
         
+        // Store data globally for export
+        let currentData = [];
+        
         // Export to CSV
         function exportCSV() {
+            if (!currentData || currentData.length === 0) {
+                log('No data available to export', 'error');
+                return;
+            }
+            
             log('Exporting data to CSV...', 'info');
-            // Implementation here
-            log('CSV export complete', 'success');
+            
+            // Create CSV header
+            const csvHeader = 'Timestamp,Date,Time,Temperature (°C),Humidity (%),Light Status\n';
+            
+            // Create CSV rows
+            const csvRows = currentData.map(reading => {
+                const date = new Date(reading.timestamp);
+                const dateStr = date.toLocaleDateString('en-US');
+                const timeStr = date.toLocaleTimeString('en-US');
+                const lightStatus = reading.light ? 'Bright' : 'Dark';
+                
+                return `${reading.timestamp},${dateStr},${timeStr},${reading.temperature.toFixed(2)},${reading.humidity.toFixed(2)},${lightStatus}`;
+            }).join('\n');
+            
+            // Combine header and rows
+            const csvContent = csvHeader + csvRows;
+            
+            // Create download link
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            
+            // Generate filename with current date
+            const now = new Date();
+            const filename = `tapchain_data_${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}.csv`;
+            link.setAttribute('download', filename);
+            
+            // Trigger download
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            log(`CSV exported: ${filename} (${currentData.length} records)`, 'success');
         }
         
         // Event listeners
         document.getElementById('scanBtn').addEventListener('click', scanNFC);
-        document.getElementById('testBtn').addEventListener('click', loadTestData);
         document.getElementById('exportBtn').addEventListener('click', exportCSV);
         document.getElementById('clearConsole').addEventListener('click', () => {
             document.getElementById('console').innerHTML = '[SYSTEM] Console cleared<br>';
@@ -770,10 +897,21 @@
         
         // Auto-start NFC scan on page load
         window.addEventListener('DOMContentLoaded', () => {
-            log('Dashboard ready - auto-scanning for NFC device', 'info');
-            setTimeout(() => {
-                scanNFC();
-            }, 1000);
+            log('Dashboard ready - checking NFC compatibility', 'info');
+            
+            const nfcCheck = checkNFCSupport();
+            if (nfcCheck.supported) {
+                log('NFC supported - starting automatic scan', 'success');
+                setTimeout(() => {
+                    scanNFC();
+                }, 1000);
+            } else {
+                log(`Device limitation: ${nfcCheck.reason}`, 'info');
+                // Auto-start will still trigger scanNFC which handles the incompatibility
+                setTimeout(() => {
+                    scanNFC();
+                }, 1000);
+            }
         });
     </script>
 </body>
