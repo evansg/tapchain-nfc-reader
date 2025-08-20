@@ -68,8 +68,8 @@
         <p>Tap your phone to the TAPCHAIN device to read sensor data via NFC.</p>
         
         <!-- Status Display -->
-        <div id="status" class="status warning">
-            Ready to read NFC data. Click "Check NFC Support" to start.
+        <div id="status" class="status info">
+            Loading TAPCHAIN Data Reader... Please keep phone close to device.
         </div>
         
         <!-- Control Buttons -->
@@ -141,7 +141,15 @@
             }
         }
         
-        // Read NFC data function
+        // Global variables for continuous download
+        let continuousDownload = {
+            active: false,
+            packets: [],
+            totalPackets: 0,
+            allReadings: []
+        };
+        
+        // Read NFC data function with continuous packet support
         async function readNfcData() {
             if (!('NDEFReader' in window)) {
                 log('❌ Web NFC not supported', 'error');
@@ -149,24 +157,30 @@
             }
             
             try {
-                log('🔍 Starting NFC scan...');
-                updateStatus('Scanning for NFC tag... Bring your phone close to the TAPCHAIN device.', 'warning');
+                log('🔍 Automatically starting NFC scan...');
+                updateStatus('📱 Scanning for device data - keep phone close!', 'warning');
+                
+                // Reset download state
+                continuousDownload = {
+                    active: true,
+                    packets: [],
+                    totalPackets: 0,
+                    allReadings: []
+                };
                 
                 const ndef = new NDEFReader();
                 await ndef.scan();
                 
-                log('📡 NFC scan started successfully');
-                log('👆 Please tap your phone to the TAPCHAIN device now');
+                log('📡 NFC scan active - waiting for device data...');
+                log('💡 If no data appears, try tapping the device again');
                 
                 ndef.addEventListener("reading", ({ message, serialNumber }) => {
-                    log(`📖 NFC tag detected! Serial: ${serialNumber}`);
-                    log(`📄 Message contains ${message.records.length} record(s)`);
+                    if (!continuousDownload.active) return;
+                    
+                    log(`📦 Packet received from device ${serialNumber}`);
                     
                     // Process each NDEF record
                     for (const record of message.records) {
-                        log(`📝 Record type: ${record.recordType}`);
-                        log(`💾 Record data length: ${record.data.byteLength} bytes`);
-                        
                         if (record.recordType === "text") {
                             const textDecoder = new TextDecoder(record.encoding);
                             const text = textDecoder.decode(record.data);
@@ -176,30 +190,292 @@
                             const url = textDecoder.decode(record.data);
                             log(`🔗 URL content: ${url}`);
                         } else {
-                            // Raw binary data (this is what we expect from TAPCHAIN)
-                            log('🔢 Processing binary sensor data...');
-                            processSensorData(record.data);
+                            // Process continuous packet data
+                            const packetData = processNDEFContinuousPacket(record.data);
+                            if (packetData) {
+                                handleContinuousPacket(packetData);
+                            }
                         }
                     }
-                    
-                    updateStatus('NFC data read successfully!', 'success');
                 });
                 
                 ndef.addEventListener("readingerror", () => {
                     log('❌ Error reading NFC tag', 'error');
-                    updateStatus('Error reading NFC tag. Try again.', 'error');
+                    if (continuousDownload.active) {
+                        updateStatus('Download interrupted. Try again.', 'error');
+                        continuousDownload.active = false;
+                    }
                 });
+                
+                // Timeout for continuous download
+                setTimeout(() => {
+                    if (continuousDownload.active) {
+                        finalizeContinuousDownload();
+                    }
+                }, 10000); // 10 second timeout
                 
             } catch (error) {
                 log(`❌ NFC scan failed: ${error}`, 'error');
                 updateStatus(`NFC scan failed: ${error.message}`, 'error');
+                continuousDownload.active = false;
             }
         }
         
-        // Process sensor data from NFC
+        // Process individual continuous packet
+        function processNDEFContinuousPacket(dataBuffer) {
+            try {
+                const data = new Uint8Array(dataBuffer);
+                log(`📊 Processing packet (${data.length} bytes)`);
+                
+                if (data.length < 16) {
+                    log('❌ Packet too short', 'error');
+                    return null;
+                }
+                
+                // Parse NDEF TLV and find TAPCHAIN signature
+                let offset = 0;
+                while (offset < data.length - 3) {
+                    if (data[offset] === 0x03) break;
+                    offset++;
+                }
+                
+                if (offset >= data.length - 3) return null;
+                
+                // Skip TLV header
+                offset++;
+                if (data[offset] === 0xFF) {
+                    offset += 3;
+                } else {
+                    offset++;
+                }
+                
+                // Find TAPCHAIN signature
+                let dataStart = -1;
+                for (let i = offset; i < offset + 20 && i < data.length - 1; i++) {
+                    if (data[i] === 0x54 && data[i + 1] === 0x43) {
+                        dataStart = i + 2;
+                        break;
+                    }
+                }
+                
+                if (dataStart === -1) return null;
+                
+                offset = dataStart;
+                const count = data[offset];
+                const interval = data[offset + 1];
+                const version = data[offset + 2];
+                const currentPacket = (data[offset + 3] << 8) | data[offset + 4];
+                const totalPackets = (data[offset + 5] << 8) | data[offset + 6];
+                
+                offset += 7;
+                
+                // Parse readings
+                const readings = [];
+                for (let i = 0; i < count && offset + 6 <= data.length; i++) {
+                    const tempRaw = (data[offset] << 8) | data[offset + 1];
+                    const temperature = (tempRaw > 32767 ? tempRaw - 65536 : tempRaw) / 10.0;
+                    const humidityRaw = (data[offset + 2] << 8) | data[offset + 3];
+                    const humidity = humidityRaw / 10.0;
+                    const lightState = data[offset + 4];
+                    const checksum = data[offset + 5];
+                    
+                    readings.push({
+                        temperature,
+                        humidity,
+                        lightState,
+                        checksum
+                    });
+                    
+                    offset += 6;
+                }
+                
+                return {
+                    currentPacket,
+                    totalPackets,
+                    count,
+                    interval,
+                    version,
+                    readings
+                };
+                
+            } catch (error) {
+                log(`❌ Error processing packet: ${error}`, 'error');
+                return null;
+            }
+        }
+        
+        // Handle continuous packet reception
+        function handleContinuousPacket(packetData) {
+            const { currentPacket, totalPackets, readings } = packetData;
+            
+            // Store packet
+            continuousDownload.packets[currentPacket - 1] = packetData;
+            continuousDownload.totalPackets = totalPackets;
+            
+            // Add readings to combined array
+            continuousDownload.allReadings.push(...readings);
+            
+            const receivedPackets = continuousDownload.packets.filter(p => p !== undefined).length;
+            const progressPercent = Math.round((receivedPackets / totalPackets) * 100);
+            
+            log(`📦 Packet ${currentPacket}/${totalPackets} received (${readings.length} readings)`);
+            updateStatus(`Downloading... ${progressPercent}% (${receivedPackets}/${totalPackets} packets)`, 'warning');
+            
+            // Check if download is complete
+            if (receivedPackets === totalPackets) {
+                finalizeContinuousDownload();
+            }
+        }
+        
+        // Finalize continuous download
+        function finalizeContinuousDownload() {
+            continuousDownload.active = false;
+            
+            const totalReadings = continuousDownload.allReadings.length;
+            log(`✅ Download complete! Received ${totalReadings} readings in ${continuousDownload.packets.length} packets`);
+            
+            if (totalReadings > 0) {
+                // Create combined dataset
+                lastReadData = {
+                    count: totalReadings,
+                    interval: continuousDownload.packets[0]?.interval || 10,
+                    version: continuousDownload.packets[0]?.version || 3,
+                    readings: continuousDownload.allReadings,
+                    timestamp: new Date()
+                };
+                
+                updateStatus(`Download complete! ${totalReadings} readings (60 days) downloaded successfully`, 'success');
+                displayData(lastReadData);
+                createChart(lastReadData);
+            } else {
+                updateStatus('Download failed - no data received', 'error');
+            }
+        }
+        
+        // Process NDEF binary sensor data from TAPCHAIN device
+        function processNDEFSensorData(dataBuffer) {
+            try {
+                log('🔍 Parsing NDEF sensor data buffer...');
+                const data = new Uint8Array(dataBuffer);
+                log(`📊 Raw NDEF data (${data.length} bytes): ${Array.from(data).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+                
+                if (data.length < 12) {
+                    log('❌ Data too short for valid NDEF sensor data', 'error');
+                    return;
+                }
+                
+                // Parse NDEF TLV structure
+                let offset = 0;
+                
+                // Find NDEF message TLV (0x03)
+                while (offset < data.length - 3) {
+                    if (data[offset] === 0x03) {
+                        log('📄 Found NDEF Message TLV');
+                        break;
+                    }
+                    offset++;
+                }
+                
+                if (offset >= data.length - 3) {
+                    log('❌ No NDEF Message TLV found', 'error');
+                    return;
+                }
+                
+                // Parse TLV length (can be 1 or 3 bytes)
+                offset++; // Skip TLV type
+                let tlv_length;
+                if (data[offset] === 0xFF) {
+                    // 3-byte length
+                    tlv_length = (data[offset + 1] << 8) | data[offset + 2];
+                    offset += 3;
+                } else {
+                    // 1-byte length
+                    tlv_length = data[offset];
+                    offset++;
+                }
+                
+                log(`📏 NDEF message length: ${tlv_length} bytes`);
+                
+                // Skip NDEF record header (look for our custom header)
+                // Look for our TAPCHAIN signature "TC"
+                let dataStart = -1;
+                for (let i = offset; i < offset + 20 && i < data.length - 1; i++) {
+                    if (data[i] === 0x54 && data[i + 1] === 0x43) { // "TC"
+                        dataStart = i + 2;
+                        log('🎯 Found TAPCHAIN data signature');
+                        break;
+                    }
+                }
+                
+                if (dataStart === -1) {
+                    log('❌ TAPCHAIN signature not found', 'error');
+                    return;
+                }
+                
+                // Parse TAPCHAIN header
+                offset = dataStart;
+                const count = data[offset];
+                const interval = data[offset + 1];
+                const version = data[offset + 2];
+                
+                log(`📈 Sensor readings: ${count} samples`);
+                log(`⏱️ Collection interval: ${interval} minutes`);
+                log(`🏷️ Data format version: ${version}`);
+                
+                offset += 3; // Skip header
+                
+                // Parse sensor readings (6 bytes each: temp(2) + humidity(2) + light(1) + checksum(1))
+                const readings = [];
+                const bytesPerReading = 6;
+                
+                for (let i = 0; i < count && offset + bytesPerReading <= data.length; i++) {
+                    // Parse temperature (2 bytes, signed, *10)
+                    const tempRaw = (data[offset] << 8) | data[offset + 1];
+                    const temperature = (tempRaw > 32767 ? tempRaw - 65536 : tempRaw) / 10.0;
+                    
+                    // Parse humidity (2 bytes, *10)
+                    const humidityRaw = (data[offset + 2] << 8) | data[offset + 3];
+                    const humidity = humidityRaw / 10.0;
+                    
+                    // Parse light state (1 byte)
+                    const lightState = data[offset + 4];
+                    
+                    // Parse checksum (1 byte)
+                    const checksum = data[offset + 5];
+                    
+                    readings.push({
+                        index: i,
+                        temperature: temperature,
+                        humidity: humidity,
+                        lightState: lightState,
+                        checksum: checksum
+                    });
+                    
+                    log(`📊 Reading ${i + 1}: ${temperature}°C, ${humidity}%, Light: ${lightState ? 'ON' : 'OFF'}, CRC: 0x${checksum.toString(16)}`);
+                    
+                    offset += bytesPerReading;
+                }
+                
+                lastReadData = {
+                    count: count,
+                    interval: interval,
+                    version: version,
+                    readings: readings,
+                    timestamp: new Date()
+                };
+                
+                displayData(lastReadData);
+                createChart(lastReadData);
+                
+            } catch (error) {
+                log(`❌ Error processing NDEF sensor data: ${error}`, 'error');
+            }
+        }
+        
+        // Legacy function for old SRAM format (keep for compatibility)
         function processSensorData(dataBuffer) {
             try {
-                log('🔍 Parsing sensor data buffer...');
+                log('🔍 Parsing legacy sensor data buffer...');
                 const data = new Uint8Array(dataBuffer);
                 log(`📊 Raw data (${data.length} bytes): ${Array.from(data).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
                 
@@ -361,28 +637,50 @@
         
         // Test with mock data
         function testWithMockData() {
-            log('🧪 Generating mock sensor data for testing...');
+            log('🧪 Generating mock NDEF sensor data for testing...');
             
-            // Create mock binary data that matches our device format
-            const mockData = new Uint8Array(32);
-            mockData[0] = 5;  // 5 readings
-            mockData[1] = 1;  // 1 minute interval
+            // Create mock NDEF binary data that matches our new device format
+            const mockData = new Uint8Array(50);
+            let offset = 0;
             
-            // Add 5 mock readings
+            // NDEF TLV header
+            mockData[offset++] = 0x03; // NDEF Message TLV
+            mockData[offset++] = 0x2C; // Length = 44 bytes (5 readings * 6 bytes + 14 byte header)
+            
+            // NDEF Record header (simplified)
+            mockData[offset++] = 0xC1; // Record header
+            mockData[offset++] = 0x01; // Type length
+            mockData[offset++] = 0x29; // Payload length = 41 bytes
+            mockData[offset++] = 0x54; // Type = 'T'
+            
+            // TAPCHAIN signature and header
+            mockData[offset++] = 0x54; // 'T'
+            mockData[offset++] = 0x43; // 'C'
+            mockData[offset++] = 5;    // 5 readings
+            mockData[offset++] = 1;    // 1 minute interval
+            mockData[offset++] = 1;    // Version 1
+            
+            // Add 5 mock readings (6 bytes each)
             for (let i = 0; i < 5; i++) {
-                const offset = 2 + i * 4;
-                // Temperature: 25.5°C = 255 (stored as int16 * 10)
+                // Temperature: 25.5°C + i = 255 + i*10 (stored as int16 * 10)
                 const temp = 255 + i * 10;
-                mockData[offset] = (temp >> 8) & 0xFF;
-                mockData[offset + 1] = temp & 0xFF;
-                // Humidity: 60.0% = 60 (stored as low byte only)
-                mockData[offset + 2] = 60 + i * 5;
+                mockData[offset++] = (temp >> 8) & 0xFF;
+                mockData[offset++] = temp & 0xFF;
+                
+                // Humidity: 60.0% + i*5 = 600 + i*50 (stored as uint16 * 10)
+                const humidity = 600 + i * 50;
+                mockData[offset++] = (humidity >> 8) & 0xFF;
+                mockData[offset++] = humidity & 0xFF;
+                
                 // Light state: alternating
-                mockData[offset + 3] = i % 2;
+                mockData[offset++] = i % 2;
+                
+                // Checksum (mock)
+                mockData[offset++] = 0xAA + i;
             }
             
-            log('🔢 Mock data created, processing...');
-            processSensorData(mockData.buffer);
+            log('🔢 Mock NDEF data created, processing...');
+            processNDEFSensorData(mockData.buffer);
         }
         
         // Event listeners
@@ -393,9 +691,36 @@
         });
         document.getElementById('testDataBtn').addEventListener('click', testWithMockData);
         
-        // Initialize
-        log('🚀 TAPCHAIN NFC Reader loaded');
-        log('💡 Click "Check NFC Support" to begin');
+        // Auto-start NFC reading when page loads
+        async function autoStartNFC() {
+            log('🚀 TAPCHAIN NFC Reader loaded');
+            
+            // Check if Web NFC is supported
+            if (!('NDEFReader' in window)) {
+                log('❌ Web NFC not supported on this device', 'error');
+                updateStatus('NFC not supported', 'error');
+                return;
+            }
+            
+            log('📱 NFC supported - starting automatic scan...', 'success');
+            updateStatus('Automatically scanning for NFC data...', 'info');
+            
+            // Automatically start reading NFC data
+            setTimeout(() => {
+                readNfcData();
+                
+                // Show manual options after 10 seconds if no data received
+                setTimeout(() => {
+                    if (continuousDownload && !continuousDownload.packets.length) {
+                        log('⏰ No data detected yet - manual controls available below');
+                        updateStatus('Tap device again or use manual controls below', 'info');
+                    }
+                }, 10000);
+            }, 1000); // Small delay to let the page fully load
+        }
+        
+        // Initialize automatically
+        window.addEventListener('DOMContentLoaded', autoStartNFC);
     </script>
 </body>
 </html>
