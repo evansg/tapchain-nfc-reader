@@ -657,9 +657,6 @@
             // Store data globally for CSV export
             currentData = readings;
             
-            // Cache data in session storage
-            sessionStorage.setItem('tapchain_cached_data', JSON.stringify(readings));
-            
             // Update stats
             const latest = readings[readings.length - 1];
             document.getElementById('tempValue').textContent = `${latest.temperature.toFixed(1)}°C`;
@@ -918,52 +915,14 @@
         
         // Auto-start NFC scan on page load
         window.addEventListener('DOMContentLoaded', () => {
-            log('Dashboard ready - checking NFC compatibility', 'info');
+            log('Dashboard ready - loading sensor data automatically', 'info');
             
-            // Check if data was already loaded in this session
-            const dataAlreadyLoaded = sessionStorage.getItem('tapchain_data_loaded') === 'true';
-            
-            const nfcCheck = checkNFCSupport();
-            if (nfcCheck.supported) {
-                log('NFC supported - starting automatic scan', 'success');
-                
-                if (dataAlreadyLoaded) {
-                    // Data was already loaded, just display it
-                    log('Data already loaded in this session - displaying cached data', 'info');
-                    updateStatus('Data loaded', 'connected');
-                    const cachedData = JSON.parse(sessionStorage.getItem('tapchain_cached_data') || '[]');
-                    if (cachedData.length > 0) {
-                        displayData(cachedData);
-                    } else {
-                        loadTestData();
-                    }
-                } else {
-                    // First time loading - automatically load data after short delay
-                    setTimeout(() => {
-                        log('Auto-loading sensor data on first visit', 'info');
-                        updateStatus('Loading sensor data', 'scanning');
-                        loadTestData();
-                        sessionStorage.setItem('tapchain_data_loaded', 'true');
-                    }, 1000);
-                }
-            } else {
-                log(`Device limitation: ${nfcCheck.reason}`, 'info');
-                // Auto-start will still trigger scanNFC which handles the incompatibility
-                setTimeout(() => {
-                    scanNFC();
-                }, 1000);
-            }
-        });
-        
-        // Handle page visibility changes (when returning from NFC tap)
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && !currentData.length) {
-                log('Page became visible - checking for NFC data', 'info');
+            // Always load data immediately when page opens (simulating device tap)
+            setTimeout(() => {
+                log('Device tapped - loading sensor data...', 'info');
                 updateStatus('Loading sensor data', 'scanning');
-                setTimeout(() => {
-                    loadTestData();
-                }, 500);
-            }
+                loadTestData();
+            }, 1000);
         });
     </script>
 </body>
