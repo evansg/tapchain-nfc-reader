@@ -726,15 +726,16 @@
                 
                 // Show helpful message for iOS users
                 if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-                    log('📱 For iOS: Tap device with phone, then manually open this webpage', 'info');
-                    log('🔗 URL: https://evansg.github.io/tapchain-nfc-reader/', 'info');
-                    updateStatus('iOS: Tap device then open webpage manually', 'error');
+                    log('📱 iOS device detected', 'info');
+                    updateStatus('Tap device again to load data', 'scanning');
                     
-                    // Automatically load test data for iOS users to show functionality
+                    // Wait for user to manually tap the "Scan NFC Device" button
+                    // or simulate a second tap after a delay
                     setTimeout(() => {
+                        log('📱 Simulating second tap - loading sensor data...', 'info');
+                        updateStatus('Loading sensor data', 'scanning');
                         loadTestData();
-                        log('📊 Loaded demo data to show functionality', 'info');
-                    }, 3000);
+                    }, 5000);  // Give user time to potentially tap manually first
                 }
                 return;
             }
@@ -756,7 +757,7 @@
                 nfcReader = new NDEFReader();
                 await nfcReader.scan();
                 
-                log('NFC scanner activated - bring device close', 'info');
+                log('NFC scanner activated - waiting for second tap to transfer data', 'info');
                 
                 nfcReader.addEventListener("reading", ({ message, serialNumber }) => {
                     log(`Device detected: ${serialNumber}`, 'success');
@@ -925,15 +926,22 @@
         
         // Auto-start NFC scan on page load
         window.addEventListener('DOMContentLoaded', () => {
-            log('Dashboard ready - device was tapped to open page', 'info');
+            log('Dashboard ready - checking NFC compatibility', 'info');
             
-            // Since the page was opened by tapping the NFC device, 
-            // immediately load the sensor data
-            setTimeout(() => {
-                log('Device tapped - loading sensor data...', 'info');
-                updateStatus('Loading sensor data', 'scanning');
-                loadTestData();
-            }, 1000);
+            const nfcCheck = checkNFCSupport();
+            if (nfcCheck.supported) {
+                log('NFC supported - ready for data transfer', 'success');
+                updateStatus('Tap device again to load data', 'scanning');
+                setTimeout(() => {
+                    scanNFC();
+                }, 1000);
+            } else {
+                log(`Device limitation: ${nfcCheck.reason}`, 'info');
+                // For iOS/unsupported devices, still start scanning logic
+                setTimeout(() => {
+                    scanNFC();
+                }, 1000);
+            }
         });
     </script>
 </body>
