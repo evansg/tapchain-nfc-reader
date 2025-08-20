@@ -726,15 +726,15 @@
                 
                 // Show helpful message for iOS users
                 if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-                    log('📱 iOS device detected - using alternative flow', 'info');
-                    updateStatus('Tap device to scan', 'scanning');
+                    log('📱 For iOS: Tap device with phone, then manually open this webpage', 'info');
+                    log('🔗 URL: https://evansg.github.io/tapchain-nfc-reader/', 'info');
+                    updateStatus('iOS: Tap device then open webpage manually', 'error');
                     
-                    // Simulate the same flow as Android
+                    // Automatically load test data for iOS users to show functionality
                     setTimeout(() => {
-                        log('📱 Device tapped - loading sensor data...', 'info');
-                        updateStatus('Loading sensor data', 'scanning');
                         loadTestData();
-                    }, 2000);
+                        log('📊 Loaded demo data to show functionality', 'info');
+                    }, 3000);
                 }
                 return;
             }
@@ -915,14 +915,21 @@
         
         // Auto-start NFC scan on page load
         window.addEventListener('DOMContentLoaded', () => {
-            log('Dashboard ready - loading sensor data automatically', 'info');
+            log('Dashboard ready - checking NFC compatibility', 'info');
             
-            // Always load data immediately when page opens (simulating device tap)
-            setTimeout(() => {
-                log('Device tapped - loading sensor data...', 'info');
-                updateStatus('Loading sensor data', 'scanning');
-                loadTestData();
-            }, 1000);
+            const nfcCheck = checkNFCSupport();
+            if (nfcCheck.supported) {
+                log('NFC supported - starting automatic scan', 'success');
+                setTimeout(() => {
+                    scanNFC();
+                }, 1000);
+            } else {
+                log(`Device limitation: ${nfcCheck.reason}`, 'info');
+                // Auto-start will still trigger scanNFC which handles the incompatibility
+                setTimeout(() => {
+                    scanNFC();
+                }, 1000);
+            }
         });
     </script>
 </body>
