@@ -712,12 +712,16 @@
                 
                 // Show helpful message for iOS users
                 if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-                    log('📱 iOS device detected', 'info');
+                    log('📱 iOS device detected - Web NFC not supported', 'info');
                     updateStatus('Tap device to load data', 'scanning');
                     
-                    // For iOS, we need to wait for the user to manually tap the "Scan NFC Device" button
-                    // since iOS doesn't support Web NFC API - the button will load test data
-                    log('💡 iOS: Use "Scan NFC Device" button to simulate data transfer', 'info');
+                    // For testing on iOS, load data automatically after a delay
+                    // In production, this would require a native app or different approach
+                    setTimeout(() => {
+                        log('📱 iOS: Loading sensor data (simulated)', 'info');
+                        updateStatus('Loading sensor data', 'scanning');
+                        loadTestData();
+                    }, 2000);
                 }
                 return;
             }
@@ -1005,22 +1009,14 @@
         
         // Event listeners
         document.getElementById('scanBtn').addEventListener('click', () => {
-            // For iOS devices, clicking scan button should load data (simulating second tap)
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-            if (isIOS) {
-                log('📱 iOS: Simulating second tap - loading sensor data...', 'info');
-                updateStatus('Loading sensor data', 'scanning');
-                // Add delay to ensure UI updates before loading data
-                setTimeout(() => {
-                    loadTestData();
-                }, 200);
+            // Restart NFC scanning when button is clicked
+            const nfcCheck = checkNFCSupport();
+            if (nfcCheck.supported) {
+                log('Restarting NFC scan...', 'info');
+                scanNFC();
             } else {
-                // For Android, this button shouldn't normally be used
-                log('Android: Attempting manual data load', 'info');
-                updateStatus('Loading sensor data', 'scanning');
-                setTimeout(() => {
-                    loadTestData();
-                }, 200);
+                log('NFC not supported on this device', 'error');
+                updateStatus('NFC not supported', 'error');
             }
         });
         document.getElementById('exportBtn').addEventListener('click', exportCSV);
@@ -1034,20 +1030,26 @@
             if (nfcCheck.supported) {
                 log('NFC supported - ready for data transfer', 'success');
                 updateStatus('Tap device to load data', 'scanning');
+                // Start NFC scanning immediately for Android
                 setTimeout(() => {
                     scanNFC();
-                }, 1000);
+                }, 500);
             } else {
                 log(`Device limitation: ${nfcCheck.reason}`, 'info');
-                // For iOS devices, just set the status - don't call scanNFC
+                
+                // For iOS devices, auto-load data after delay since they can't scan NFC
                 if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-                    updateStatus('Tap device to load data', 'scanning');
-                    log('📱 iOS: Use "Scan NFC Device" button to load data', 'info');
-                } else {
-                    // For other unsupported browsers
+                    updateStatus('Preparing to load data', 'scanning');
+                    log('📱 iOS: Web NFC not supported, loading data automatically', 'info');
                     setTimeout(() => {
-                        scanNFC();
-                    }, 1000);
+                        log('Loading sensor data...', 'info');
+                        updateStatus('Loading sensor data', 'scanning');
+                        loadTestData();
+                    }, 2000);
+                } else {
+                    // Other unsupported browsers
+                    updateStatus('NFC not supported', 'error');
+                    log('Browser does not support Web NFC API', 'error');
                 }
             }
         });
