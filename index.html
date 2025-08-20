@@ -384,6 +384,28 @@
             .action-buttons {
                 flex-direction: column;
             }
+            
+            .chart-container {
+                padding: 1rem;
+            }
+            
+            .chart-controls {
+                flex-wrap: wrap;
+            }
+            
+            .chart-btn {
+                font-size: 0.8rem;
+                padding: 0.4rem 0.8rem;
+            }
+            
+            .console-container {
+                margin-top: 1rem;
+            }
+            
+            .console {
+                height: 150px;
+                font-size: 0.75rem;
+            }
         }
     </style>
 </head>
@@ -498,7 +520,9 @@
                     <button class="chart-btn" data-chart="humidity">Humidity</button>
                 </div>
             </div>
-            <canvas id="dataChart" width="400" height="150"></canvas>
+            <div style="position: relative; height: 300px; width: 100%;">
+                <canvas id="dataChart"></canvas>
+            </div>
         </div>
         
         <!-- Console -->
@@ -564,15 +588,56 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
                 plugins: {
                     legend: {
                         display: true,
-                        position: 'bottom'
+                        position: 'bottom',
+                        labels: {
+                            boxWidth: 12,
+                            padding: 10,
+                            font: {
+                                size: 11
+                            }
+                        }
+                    },
+                    tooltip: {
+                        enabled: true,
+                        mode: 'index'
                     }
                 },
                 scales: {
+                    x: {
+                        display: true,
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45,
+                            autoSkip: true,
+                            maxTicksLimit: 8,
+                            font: {
+                                size: 10
+                            }
+                        }
+                    },
                     y: {
-                        beginAtZero: false
+                        beginAtZero: false,
+                        ticks: {
+                            font: {
+                                size: 10
+                            }
+                        }
+                    }
+                },
+                elements: {
+                    point: {
+                        radius: 0,
+                        hoverRadius: 3
+                    },
+                    line: {
+                        borderWidth: 2
                     }
                 }
             }
@@ -614,11 +679,23 @@
             document.getElementById('lightValue').textContent = latest.light ? 'Bright' : 'Dark';
             document.getElementById('dataCount').textContent = readings.length;
             
-            // Update chart
-            const labels = readings.map((_, i) => {
-                if (i % 20 === 0) {
-                    const date = new Date(readings[i].timestamp);
-                    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+            // Update chart with mobile-friendly data
+            const isMobile = window.innerWidth < 768;
+            const labelInterval = isMobile ? 40 : 20; // Show fewer labels on mobile
+            
+            const labels = readings.map((reading, i) => {
+                if (i % labelInterval === 0 || i === readings.length - 1) {
+                    const date = new Date(reading.timestamp);
+                    // Shorter format for mobile
+                    if (isMobile) {
+                        return date.toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric',
+                            hour: '2-digit'
+                        });
+                    } else {
+                        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                    }
                 }
                 return '';
             });
