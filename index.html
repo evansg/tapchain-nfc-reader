@@ -275,64 +275,6 @@
             background: var(--light);
         }
         
-        /* Console */
-        .console-container {
-            background: #1a1a2e;
-            border-radius: 16px;
-            padding: 1.5rem;
-            box-shadow: var(--shadow-lg);
-        }
-        
-        .console-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-        
-        .console-title {
-            color: #10b981;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .console-clear {
-            padding: 0.25rem 0.75rem;
-            background: #374151;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            cursor: pointer;
-        }
-        
-        .console {
-            background: #0f0f23;
-            color: #10b981;
-            padding: 1rem;
-            border-radius: 8px;
-            height: 200px;
-            overflow-y: auto;
-            font-family: 'Courier New', monospace;
-            font-size: 0.85rem;
-            line-height: 1.4;
-        }
-        
-        .console::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        .console::-webkit-scrollbar-track {
-            background: #1a1a2e;
-        }
-        
-        .console::-webkit-scrollbar-thumb {
-            background: #374151;
-            border-radius: 4px;
-        }
         
         /* Loading Animation */
         .loading-overlay {
@@ -504,6 +446,10 @@
                 <i class="fas fa-download"></i>
                 Export CSV
             </button>
+            <button id="exportPdfBtn" class="btn btn-secondary">
+                <i class="fas fa-file-pdf"></i>
+                Export PDF
+            </button>
         </div>
         
         <!-- Chart Container -->
@@ -521,24 +467,14 @@
             </div>
         </div>
         
-        <!-- Console -->
-        <div class="console-container">
-            <div class="console-header">
-                <div class="console-title">
-                    <i class="fas fa-terminal"></i>
-                    Debug Console
-                </div>
-                <button id="clearConsole" class="console-clear">Clear</button>
-            </div>
-            <div id="console" class="console">
-                [SYSTEM] TapChain Dashboard initialized<br>
-                [SYSTEM] Waiting for NFC device...<br>
-            </div>
-        </div>
+        <!-- Debug Console Hidden from Users -->
+        <div id="console" style="display: none;"></div>
     </div>
     
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
     <script>
         // Console logging
@@ -790,15 +726,15 @@
                 
                 // Show helpful message for iOS users
                 if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-                    log('📱 For iOS: Tap device with phone, then manually open this webpage', 'info');
-                    log('🔗 URL: https://evansg.github.io/tapchain-nfc-reader/', 'info');
-                    updateStatus('iOS: Tap device then open webpage manually', 'error');
+                    log('📱 iOS device detected - using alternative flow', 'info');
+                    updateStatus('Tap device to scan', 'scanning');
                     
-                    // Automatically load test data for iOS users to show functionality
+                    // Simulate the same flow as Android
                     setTimeout(() => {
+                        log('📱 Device tapped - loading sensor data...', 'info');
+                        updateStatus('Loading sensor data', 'scanning');
                         loadTestData();
-                        log('📊 Loaded demo data to show functionality', 'info');
-                    }, 3000);
+                    }, 2000);
                 }
                 return;
             }
@@ -879,9 +815,91 @@
             log(`CSV exported: ${filename} (${currentData.length} records)`, 'success');
         }
         
+        // Export to PDF
+        function exportPDF() {
+            if (!currentData || currentData.length === 0) {
+                log('No data available to export', 'error');
+                return;
+            }
+            
+            log('Exporting data to PDF...', 'info');
+            
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            // Add title
+            doc.setFontSize(20);
+            doc.text('TapChain Sensor Data Report', 20, 20);
+            
+            // Add summary
+            const latest = currentData[currentData.length - 1];
+            const oldest = currentData[0];
+            
+            doc.setFontSize(12);
+            doc.text(`Report Generated: ${new Date().toLocaleDateString()}`, 20, 35);
+            doc.text(`Data Period: ${new Date(oldest.timestamp).toLocaleDateString()} - ${new Date(latest.timestamp).toLocaleDateString()}`, 20, 45);
+            doc.text(`Total Data Points: ${currentData.length}`, 20, 55);
+            
+            // Add current readings
+            doc.setFontSize(14);
+            doc.text('Current Readings:', 20, 75);
+            doc.setFontSize(12);
+            doc.text(`Temperature: ${latest.temperature.toFixed(1)}°C`, 25, 85);
+            doc.text(`Humidity: ${latest.humidity.toFixed(1)}%`, 25, 95);
+            doc.text(`Light Status: ${latest.light ? 'Bright' : 'Dark'}`, 25, 105);
+            
+            // Add chart image
+            const canvas = document.getElementById('dataChart');
+            const chartImage = canvas.toDataURL('image/png');
+            doc.addImage(chartImage, 'PNG', 20, 120, 170, 85);
+            
+            // Add data table on new page
+            doc.addPage();
+            doc.setFontSize(14);
+            doc.text('Detailed Data:', 20, 20);
+            
+            // Table headers
+            doc.setFontSize(10);
+            doc.text('Date', 20, 35);
+            doc.text('Time', 55, 35);
+            doc.text('Temp (°C)', 90, 35);
+            doc.text('Humidity (%)', 125, 35);
+            doc.text('Light', 165, 35);
+            
+            // Table data (show first 30 entries to fit on page)
+            let y = 45;
+            const maxEntries = Math.min(30, currentData.length);
+            
+            for (let i = 0; i < maxEntries; i++) {
+                const reading = currentData[i];
+                const date = new Date(reading.timestamp);
+                
+                doc.text(date.toLocaleDateString(), 20, y);
+                doc.text(date.toLocaleTimeString(), 55, y);
+                doc.text(reading.temperature.toFixed(1), 90, y);
+                doc.text(reading.humidity.toFixed(1), 125, y);
+                doc.text(reading.light ? 'Bright' : 'Dark', 165, y);
+                
+                y += 7;
+                if (y > 280) break; // Page limit
+            }
+            
+            if (currentData.length > maxEntries) {
+                doc.text(`... and ${currentData.length - maxEntries} more entries`, 20, y + 10);
+            }
+            
+            // Generate filename and save
+            const now = new Date();
+            const filename = `tapchain_report_${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}.pdf`;
+            doc.save(filename);
+            
+            log(`PDF exported: ${filename}`, 'success');
+        }
+        
         // Event listeners
         document.getElementById('scanBtn').addEventListener('click', scanNFC);
         document.getElementById('exportBtn').addEventListener('click', exportCSV);
+        document.getElementById('exportPdfBtn').addEventListener('click', exportPDF);
         document.getElementById('clearConsole').addEventListener('click', () => {
             document.getElementById('console').innerHTML = '[SYSTEM] Console cleared<br>';
         });
