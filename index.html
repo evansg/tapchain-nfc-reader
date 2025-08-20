@@ -1056,7 +1056,7 @@
             const nfcCheck = checkNFCSupport();
             if (nfcCheck.supported) {
                 log('NFC supported - ready for data transfer', 'success');
-                updateStatus('Tap device again to load data', 'scanning');
+                updateStatus('Tap device to load data', 'scanning');
                 setTimeout(() => {
                     scanNFC();
                 }, 1000);
