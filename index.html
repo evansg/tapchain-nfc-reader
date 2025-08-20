@@ -677,11 +677,6 @@
             chart.data.datasets[2].data = readings.map(r => r.light);
             chart.update();
             
-            // Vibrate phone when data is loaded (if supported)
-            if ('vibrate' in navigator) {
-                navigator.vibrate([200, 100, 200]); // Vibrate pattern: 200ms on, 100ms off, 200ms on
-            }
-            
             log(`Displayed ${readings.length} data points`, 'success');
         }
         
@@ -731,27 +726,20 @@
                 log('NFC scanner ready', 'info');
                 updateStatus('Tap device to load data', 'scanning');
                 
-                // Clean up any existing reader
-                if (nfcReader) {
-                    try {
-                        nfcReader.removeEventListener("reading");
-                        nfcReader.removeEventListener("readingerror");
-                    } catch (e) {
-                        // Ignore cleanup errors
-                    }
-                }
-                
                 nfcReader = new NDEFReader();
                 await nfcReader.scan();
                 
                 nfcReader.addEventListener("reading", ({ message, serialNumber }) => {
                     log(`Device detected: ${serialNumber}`, 'success');
                     
-                    // For now, load test data when NFC is detected
-                    // In production, this would parse actual NFC data
+                    // Load test data when NFC is detected
                     log('Device tapped - loading sensor data...', 'info');
                     updateStatus('Loading sensor data', 'scanning');
-                    loadTestData();
+                    
+                    // Load data after a short delay to ensure UI updates
+                    setTimeout(() => {
+                        loadTestData();
+                    }, 100);
                 });
                 
                 nfcReader.addEventListener("readingerror", () => {
@@ -1022,11 +1010,17 @@
             if (isIOS) {
                 log('📱 iOS: Simulating second tap - loading sensor data...', 'info');
                 updateStatus('Loading sensor data', 'scanning');
-                loadTestData();
+                // Add delay to ensure UI updates before loading data
+                setTimeout(() => {
+                    loadTestData();
+                }, 200);
             } else {
-                // For Android, start NFC scanning (but they should use actual NFC tap)
-                log('Android: Use NFC tap instead of button', 'info');
-                updateStatus('Please tap device with NFC', 'scanning');
+                // For Android, this button shouldn't normally be used
+                log('Android: Attempting manual data load', 'info');
+                updateStatus('Loading sensor data', 'scanning');
+                setTimeout(() => {
+                    loadTestData();
+                }, 200);
             }
         });
         document.getElementById('exportBtn').addEventListener('click', exportCSV);
@@ -1045,10 +1039,16 @@
                 }, 1000);
             } else {
                 log(`Device limitation: ${nfcCheck.reason}`, 'info');
-                // For iOS/unsupported devices, still start scanning logic
-                setTimeout(() => {
-                    scanNFC();
-                }, 1000);
+                // For iOS devices, just set the status - don't call scanNFC
+                if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+                    updateStatus('Tap device to load data', 'scanning');
+                    log('📱 iOS: Use "Scan NFC Device" button to load data', 'info');
+                } else {
+                    // For other unsupported browsers
+                    setTimeout(() => {
+                        scanNFC();
+                    }, 1000);
+                }
             }
         });
     </script>
