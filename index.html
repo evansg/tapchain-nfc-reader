@@ -202,15 +202,123 @@
             position: relative;
             height: 300px;
             width: 100%;
-            touch-action: none;
-            user-select: none;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
         }
         
-        #dataChart {
-            touch-action: none;
+        /* Date Range Slider Styles */
+        .date-range-container {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-top: 1rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        .date-range-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .date-range-title {
+            font-weight: 600;
+            color: var(--dark);
+            font-size: 0.95rem;
+        }
+        
+        .date-range-display {
+            font-size: 0.85rem;
+            color: var(--primary);
+            font-weight: 500;
+            background: var(--light);
+            padding: 0.3rem 0.8rem;
+            border-radius: 6px;
+        }
+        
+        .slider-container {
+            position: relative;
+            padding: 0 10px;
+        }
+        
+        .range-slider {
+            width: 100%;
+            height: 40px;
+            position: relative;
+        }
+        
+        .slider-track {
+            width: 100%;
+            height: 6px;
+            background: var(--light);
+            border-radius: 3px;
+            position: absolute;
+            top: 17px;
+        }
+        
+        .slider-range {
+            height: 6px;
+            background: var(--primary);
+            border-radius: 3px;
+            position: absolute;
+            top: 17px;
+        }
+        
+        .slider-thumb {
+            width: 20px;
+            height: 20px;
+            background: var(--primary);
+            border: 3px solid white;
+            border-radius: 50%;
+            position: absolute;
+            top: 10px;
+            cursor: grab;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+            transition: transform 0.2s;
+        }
+        
+        .slider-thumb:active {
+            cursor: grabbing;
+            transform: scale(1.2);
+        }
+        
+        .slider-thumb.left {
+            z-index: 2;
+        }
+        
+        .slider-thumb.right {
+            z-index: 1;
+        }
+        
+        .date-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--secondary-color);
+        }
+        
+        .preset-buttons {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .preset-btn {
+            padding: 0.4rem 0.8rem;
+            border: 1px solid var(--light);
+            background: white;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--dark);
+        }
+        
+        .preset-btn:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
         }
         
         .chart-header {
@@ -439,18 +547,37 @@
         <div class="chart-container">
             <div class="chart-header">
                 <h3 class="chart-title">Sensor Data Timeline</h3>
-                <div class="chart-controls">
-                    <button id="resetZoomBtn" class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
-                        <i class="fas fa-search-minus"></i>
-                        Reset Zoom
-                    </button>
-                </div>
             </div>
             <div class="chart-wrapper">
                 <canvas id="dataChart"></canvas>
             </div>
-            <div class="zoom-info" style="font-size: 0.8rem; color: #6b7280; margin-top: 0.5rem; text-align: center;">
-                💡 Mouse wheel to zoom • Click and drag to pan • Pinch to zoom on mobile
+        </div>
+        
+        <!-- Date Range Slider -->
+        <div class="date-range-container">
+            <div class="date-range-header">
+                <span class="date-range-title">Date Range Filter</span>
+                <span class="date-range-display" id="rangeDisplay">Full Range</span>
+            </div>
+            <div class="slider-container">
+                <div class="range-slider">
+                    <div class="slider-track"></div>
+                    <div class="slider-range" id="sliderRange"></div>
+                    <div class="slider-thumb left" id="thumbLeft"></div>
+                    <div class="slider-thumb right" id="thumbRight"></div>
+                </div>
+            </div>
+            <div class="date-labels">
+                <span id="startLabel">Start</span>
+                <span id="currentRangeLabel" style="font-weight: 600; color: var(--primary);">Selected Range</span>
+                <span id="endLabel">End</span>
+            </div>
+            <div class="preset-buttons">
+                <button class="preset-btn" onclick="setDateRange('all')">All Data</button>
+                <button class="preset-btn" onclick="setDateRange('week')">Last Week</button>
+                <button class="preset-btn" onclick="setDateRange('3days')">Last 3 Days</button>
+                <button class="preset-btn" onclick="setDateRange('day')">Last Day</button>
+                <button class="preset-btn" onclick="setDateRange('12hours')">Last 12 Hours</button>
             </div>
         </div>
         
@@ -460,8 +587,6 @@
     
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Chart.js Zoom Plugin -->
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <!-- jsPDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
@@ -520,7 +645,6 @@
                     }
                 ]
             },
-            plugins: [window.ChartZoom],
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -543,37 +667,6 @@
                     tooltip: {
                         enabled: true,
                         mode: 'index'
-                    },
-                    zoom: {
-                        pan: {
-                            enabled: true,
-                            mode: 'x',
-                            modifierKey: null,
-                            onPanStart: function({chart}) {
-                                chart.canvas.style.cursor = 'grabbing';
-                                return true;
-                            },
-                            onPanComplete: function({chart}) {
-                                chart.canvas.style.cursor = 'default';
-                            }
-                        },
-                        zoom: {
-                            wheel: {
-                                enabled: true,
-                                speed: 0.1
-                            },
-                            pinch: {
-                                enabled: true
-                            },
-                            mode: 'x',
-                            onZoomStart: function() {
-                                document.body.style.overflow = 'hidden';
-                                return true;
-                            },
-                            onZoomComplete: function() {
-                                document.body.style.overflow = '';
-                            }
-                        }
                     }
                 },
                 scales: {
@@ -761,43 +854,112 @@
             updateStatus('Data loaded correctly', 'connected');
         }
         
-        // Display data in UI
-        function displayData(readings) {
-            if (!readings || readings.length === 0) {
-                log('No data to display', 'error');
-                return;
+        // Initialize date range slider
+        function initializeSlider() {
+            const thumbLeft = document.getElementById('thumbLeft');
+            const thumbRight = document.getElementById('thumbRight');
+            const sliderRange = document.getElementById('sliderRange');
+            const sliderTrack = document.querySelector('.slider-track');
+            
+            if (!thumbLeft || !thumbRight || !currentData.length) return;
+            
+            let isDragging = null;
+            const trackWidth = sliderTrack.offsetWidth - 20;
+            
+            function updateSliderPosition() {
+                const leftPos = (sliderMin / 100) * trackWidth;
+                const rightPos = (sliderMax / 100) * trackWidth;
+                
+                thumbLeft.style.left = leftPos + 'px';
+                thumbRight.style.left = rightPos + 'px';
+                
+                sliderRange.style.left = leftPos + 'px';
+                sliderRange.style.width = (rightPos - leftPos) + 'px';
+                
+                filterDataByRange();
             }
             
-            // Store data globally for CSV export
-            currentData = readings;
+            function filterDataByRange() {
+                const startIdx = Math.floor((sliderMin / 100) * currentData.length);
+                const endIdx = Math.ceil((sliderMax / 100) * currentData.length);
+                
+                filteredData = currentData.slice(startIdx, endIdx);
+                
+                // Update labels
+                if (filteredData.length > 0) {
+                    const startDate = new Date(filteredData[0].timestamp);
+                    const endDate = new Date(filteredData[filteredData.length - 1].timestamp);
+                    
+                    document.getElementById('startLabel').textContent = startDate.toLocaleDateString();
+                    document.getElementById('endLabel').textContent = endDate.toLocaleDateString();
+                    document.getElementById('currentRangeLabel').textContent = 
+                        `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`;
+                    document.getElementById('rangeDisplay').textContent = 
+                        `${filteredData.length} points`;
+                }
+                
+                updateChart(filteredData);
+            }
             
-            // Update stats
-            const latest = readings[readings.length - 1];
-            document.getElementById('tempValue').textContent = `${latest.temperature.toFixed(1)}°C`;
-            document.getElementById('humValue').textContent = `${latest.humidity.toFixed(1)}%`;
-            document.getElementById('lightValue').textContent = latest.light ? 'Bright' : 'Dark';
-            document.getElementById('dataCount').textContent = readings.length;
+            function handleMouseDown(e, thumb) {
+                e.preventDefault();
+                isDragging = thumb;
+            }
             
-            // Update chart with responsive date labels
+            function handleMouseMove(e) {
+                if (!isDragging) return;
+                
+                const rect = sliderTrack.getBoundingClientRect();
+                const x = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                let percent = ((x - rect.left - 10) / trackWidth) * 100;
+                percent = Math.max(0, Math.min(100, percent));
+                
+                if (isDragging === 'left') {
+                    sliderMin = Math.min(percent, sliderMax - 5);
+                } else {
+                    sliderMax = Math.max(percent, sliderMin + 5);
+                }
+                
+                updateSliderPosition();
+            }
+            
+            function handleMouseUp() {
+                isDragging = null;
+            }
+            
+            // Mouse events
+            thumbLeft.addEventListener('mousedown', (e) => handleMouseDown(e, 'left'));
+            thumbRight.addEventListener('mousedown', (e) => handleMouseDown(e, 'right'));
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            
+            // Touch events for mobile
+            thumbLeft.addEventListener('touchstart', (e) => handleMouseDown(e, 'left'));
+            thumbRight.addEventListener('touchstart', (e) => handleMouseDown(e, 'right'));
+            document.addEventListener('touchmove', handleMouseMove);
+            document.addEventListener('touchend', handleMouseUp);
+            
+            updateSliderPosition();
+        }
+        
+        // Update chart with filtered data
+        function updateChart(data) {
+            if (!data || data.length === 0) return;
+            
             const isMobile = window.innerWidth < 768;
-            
-            // For large datasets, show fewer labels
-            const labelInterval = readings.length > 1000 ? 
-                (isMobile ? Math.floor(readings.length / 10) : Math.floor(readings.length / 20)) : 
+            const labelInterval = data.length > 1000 ? 
+                (isMobile ? Math.floor(data.length / 10) : Math.floor(data.length / 20)) : 
                 (isMobile ? 25 : 15);
             
-            const labels = readings.map((reading, i) => {
+            const labels = data.map((reading, i) => {
                 const date = new Date(reading.timestamp);
-                // Show date labels at calculated intervals
-                if (i % labelInterval === 0 || i === readings.length - 1 || i === 0) {
-                    if (readings.length > 1000) {
-                        // For month-long data, just show date
+                if (i % labelInterval === 0 || i === data.length - 1 || i === 0) {
+                    if (data.length > 1000) {
                         return date.toLocaleDateString('en-US', { 
                             month: 'short', 
                             day: 'numeric'
                         });
                     } else {
-                        // For shorter periods, show date and time
                         return date.toLocaleDateString('en-US', { 
                             month: 'short', 
                             day: 'numeric'
@@ -807,14 +969,79 @@
                         });
                     }
                 }
-                return ''; // Empty string for points without labels
+                return '';
             });
             
             chart.data.labels = labels;
-            chart.data.datasets[0].data = readings.map(r => r.temperature);
-            chart.data.datasets[1].data = readings.map(r => r.humidity);
-            chart.data.datasets[2].data = readings.map(r => r.light);
+            chart.data.datasets[0].data = data.map(r => r.temperature);
+            chart.data.datasets[1].data = data.map(r => r.humidity);
+            chart.data.datasets[2].data = data.map(r => r.light);
             chart.update();
+        }
+        
+        // Set date range preset
+        window.setDateRange = function(preset) {
+            if (!currentData.length) return;
+            
+            const now = currentData[currentData.length - 1].timestamp;
+            let startTime;
+            
+            switch(preset) {
+                case 'all':
+                    sliderMin = 0;
+                    sliderMax = 100;
+                    break;
+                case 'week':
+                    startTime = now - (7 * 24 * 60 * 60 * 1000);
+                    break;
+                case '3days':
+                    startTime = now - (3 * 24 * 60 * 60 * 1000);
+                    break;
+                case 'day':
+                    startTime = now - (24 * 60 * 60 * 1000);
+                    break;
+                case '12hours':
+                    startTime = now - (12 * 60 * 60 * 1000);
+                    break;
+            }
+            
+            if (startTime) {
+                const startIdx = currentData.findIndex(r => r.timestamp >= startTime);
+                if (startIdx !== -1) {
+                    sliderMin = (startIdx / currentData.length) * 100;
+                    sliderMax = 100;
+                }
+            }
+            
+            initializeSlider();
+        }
+        
+        // Display data in UI
+        function displayData(readings) {
+            if (!readings || readings.length === 0) {
+                log('No data to display', 'error');
+                return;
+            }
+            
+            // Store data globally for CSV export
+            currentData = readings;
+            filteredData = readings;
+            
+            // Update stats
+            const latest = readings[readings.length - 1];
+            document.getElementById('tempValue').textContent = `${latest.temperature.toFixed(1)}°C`;
+            document.getElementById('humValue').textContent = `${latest.humidity.toFixed(1)}%`;
+            document.getElementById('lightValue').textContent = latest.light ? 'Bright' : 'Dark';
+            document.getElementById('dataCount').textContent = readings.length;
+            
+            // Initialize slider with full range
+            sliderMin = 0;
+            sliderMax = 100;
+            
+            // Initialize the slider and display all data
+            setTimeout(() => {
+                initializeSlider();
+            }, 100);
             
             log(`Displayed ${readings.length} data points`, 'success');
         }
@@ -898,7 +1125,10 @@
         
         // Store data globally for export
         let currentData = [];
+        let filteredData = [];
         let nfcReader = null;
+        let sliderMin = 0;
+        let sliderMax = 100;
         
         // Export to CSV
         function exportCSV() {
@@ -1160,26 +1390,6 @@
         });
         document.getElementById('exportBtn').addEventListener('click', exportCSV);
         document.getElementById('exportPdfBtn').addEventListener('click', exportPDF);
-        document.getElementById('resetZoomBtn').addEventListener('click', () => {
-            chart.resetZoom();
-            log('Chart zoom reset', 'info');
-        });
-        
-        // Prevent zoom on chart touch for mobile
-        const chartCanvas = document.getElementById('dataChart');
-        if (chartCanvas) {
-            chartCanvas.addEventListener('touchstart', function(e) {
-                if (e.touches.length > 1) {
-                    e.preventDefault();
-                }
-            }, { passive: false });
-            
-            chartCanvas.addEventListener('touchmove', function(e) {
-                if (e.touches.length > 1) {
-                    e.preventDefault();
-                }
-            }, { passive: false });
-        }
         
         // Auto-start NFC scan on page load
         window.addEventListener('DOMContentLoaded', () => {
