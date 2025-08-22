@@ -920,21 +920,33 @@
             
             window.addEventListener('resize', updateTrackWidth);
             window.addEventListener('orientationchange', () => {
-                setTimeout(updateTrackWidth, 100);
+                setTimeout(() => {
+                    updateTrackWidth();
+                    updateSliderPosition();
+                }, 200);
             });
             
             function updateSliderPosition() {
                 // Ensure we have current track width
                 trackWidth = sliderTrack.offsetWidth - 20;
                 
+                // Make sure trackWidth is valid
+                if (trackWidth <= 0) {
+                    setTimeout(() => updateSliderPosition(), 50);
+                    return;
+                }
+                
                 const leftPos = Math.max(0, Math.min(trackWidth, (sliderMin / 100) * trackWidth));
                 const rightPos = Math.max(0, Math.min(trackWidth, (sliderMax / 100) * trackWidth));
                 
                 thumbLeft.style.left = leftPos + 'px';
+                thumbLeft.style.display = 'block';
                 thumbRight.style.left = rightPos + 'px';
+                thumbRight.style.display = 'block';
                 
                 sliderRange.style.left = leftPos + 'px';
                 sliderRange.style.width = Math.max(0, (rightPos - leftPos)) + 'px';
+                sliderRange.style.display = 'block';
                 
                 filterDataByRange();
             }
@@ -999,7 +1011,10 @@
             document.addEventListener('touchmove', handleMouseMove);
             document.addEventListener('touchend', handleMouseUp);
             
-            updateSliderPosition();
+            // Initial positioning with delay to ensure DOM is ready
+            setTimeout(() => {
+                updateSliderPosition();
+            }, 10);
         }
         
         // Update chart with filtered data
@@ -1073,7 +1088,49 @@
                 }
             }
             
-            initializeSlider();
+            // Force update slider position
+            setTimeout(() => {
+                const thumbLeft = document.getElementById('thumbLeft');
+                const thumbRight = document.getElementById('thumbRight');
+                const sliderRange = document.getElementById('sliderRange');
+                const sliderTrack = document.querySelector('.slider-track');
+                
+                if (thumbLeft && thumbRight && sliderTrack) {
+                    const trackWidth = sliderTrack.offsetWidth - 20;
+                    if (trackWidth > 0) {
+                        const leftPos = Math.max(0, Math.min(trackWidth, (sliderMin / 100) * trackWidth));
+                        const rightPos = Math.max(0, Math.min(trackWidth, (sliderMax / 100) * trackWidth));
+                        
+                        thumbLeft.style.left = leftPos + 'px';
+                        thumbLeft.style.display = 'block';
+                        thumbRight.style.left = rightPos + 'px';
+                        thumbRight.style.display = 'block';
+                        
+                        sliderRange.style.left = leftPos + 'px';
+                        sliderRange.style.width = Math.max(0, (rightPos - leftPos)) + 'px';
+                        sliderRange.style.display = 'block';
+                        
+                        // Update chart
+                        const startIdx = Math.floor((sliderMin / 100) * currentData.length);
+                        const endIdx = Math.ceil((sliderMax / 100) * currentData.length);
+                        filteredData = currentData.slice(startIdx, endIdx);
+                        updateChart(filteredData);
+                        
+                        // Update labels
+                        if (filteredData.length > 0) {
+                            const startDate = new Date(filteredData[0].timestamp);
+                            const endDate = new Date(filteredData[filteredData.length - 1].timestamp);
+                            
+                            document.getElementById('startLabel').textContent = startDate.toLocaleDateString();
+                            document.getElementById('endLabel').textContent = endDate.toLocaleDateString();
+                            document.getElementById('currentRangeLabel').textContent = 
+                                `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`;
+                            document.getElementById('rangeDisplay').textContent = 
+                                `${filteredData.length} points`;
+                        }
+                    }
+                }
+            }, 50);
         }
         
         // Display data in UI
@@ -1101,7 +1158,7 @@
             // Initialize the slider and display all data
             setTimeout(() => {
                 initializeSlider();
-            }, 100);
+            }, 200);
             
             log(`Displayed ${readings.length} data points`, 'success');
         }
