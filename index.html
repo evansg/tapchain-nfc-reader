@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>TapChain Dashboard</title>
     
     <!-- Modern fonts and icons -->
@@ -45,8 +45,7 @@
             backdrop-filter: blur(10px);
             padding: 1.5rem 2rem;
             box-shadow: var(--shadow);
-            position: sticky;
-            top: 0;
+            position: relative;
             z-index: 100;
         }
         
@@ -196,6 +195,22 @@
             border-radius: 16px;
             box-shadow: var(--shadow);
             margin-bottom: 2rem;
+            touch-action: pan-y;
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+            width: 100%;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+        
+        #dataChart {
+            touch-action: none;
         }
         
         .chart-header {
@@ -431,7 +446,7 @@
                     </button>
                 </div>
             </div>
-            <div style="position: relative; height: 300px; width: 100%;">
+            <div class="chart-wrapper">
                 <canvas id="dataChart"></canvas>
             </div>
             <div class="zoom-info" style="font-size: 0.8rem; color: #6b7280; margin-top: 0.5rem; text-align: center;">
@@ -533,16 +548,31 @@
                         pan: {
                             enabled: true,
                             mode: 'x',
-                            modifierKey: null
+                            modifierKey: null,
+                            onPanStart: function({chart}) {
+                                chart.canvas.style.cursor = 'grabbing';
+                                return true;
+                            },
+                            onPanComplete: function({chart}) {
+                                chart.canvas.style.cursor = 'default';
+                            }
                         },
                         zoom: {
                             wheel: {
                                 enabled: true,
+                                speed: 0.1
                             },
                             pinch: {
                                 enabled: true
                             },
-                            mode: 'x'
+                            mode: 'x',
+                            onZoomStart: function() {
+                                document.body.style.overflow = 'hidden';
+                                return true;
+                            },
+                            onZoomComplete: function() {
+                                document.body.style.overflow = '';
+                            }
                         }
                     }
                 },
@@ -1134,6 +1164,22 @@
             chart.resetZoom();
             log('Chart zoom reset', 'info');
         });
+        
+        // Prevent zoom on chart touch for mobile
+        const chartCanvas = document.getElementById('dataChart');
+        if (chartCanvas) {
+            chartCanvas.addEventListener('touchstart', function(e) {
+                if (e.touches.length > 1) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+            
+            chartCanvas.addEventListener('touchmove', function(e) {
+                if (e.touches.length > 1) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+        }
         
         // Auto-start NFC scan on page load
         window.addEventListener('DOMContentLoaded', () => {
