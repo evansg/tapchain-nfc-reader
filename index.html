@@ -17,9 +17,10 @@
         }
         
         :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --secondary: #8b5cf6;
+            --primary: #fe8c4f;
+            --primary-dark: #e57a3f;
+            --primary-light: #ffab79;
+            --secondary: #ff9f5f;
             --success: #10b981;
             --warning: #f59e0b;
             --danger: #ef4444;
@@ -32,7 +33,7 @@
         
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #fe8c4f 0%, #ff6b3d 100%);
             min-height: 100vh;
             color: var(--dark);
             line-height: 1.6;
@@ -148,7 +149,7 @@
         }
         
         .stat-icon.temp {
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: linear-gradient(135deg, #fe8c4f, #e57a3f);
             color: white;
         }
         
@@ -158,12 +159,12 @@
         }
         
         .stat-icon.light {
-            background: linear-gradient(135deg, #ffd93d, #ff6b6b);
+            background: linear-gradient(135deg, #ffab79, #fe8c4f);
             color: white;
         }
         
         .stat-icon.data {
-            background: linear-gradient(135deg, #6fcf97, #219653);
+            background: linear-gradient(135deg, #ff9f5f, #fe8c4f);
             color: white;
         }
         
@@ -928,8 +929,8 @@
             const pageWidth = doc.internal.pageSize.width;
             const pageHeight = doc.internal.pageSize.height;
             
-            // Modern color scheme
-            const primaryColor = [99, 102, 241]; // #6366f1
+            // Modern color scheme - Orange theme
+            const primaryColor = [254, 140, 79]; // #fe8c4f - Product orange
             const secondaryColor = [107, 114, 128]; // #6b7280
             const lightGray = [243, 244, 246]; // #f3f4f6
             
