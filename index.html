@@ -238,12 +238,15 @@
         .slider-container {
             position: relative;
             padding: 0 10px;
+            overflow: hidden;
+            width: 100%;
         }
         
         .range-slider {
             width: 100%;
             height: 40px;
             position: relative;
+            overflow: hidden;
         }
         
         .slider-track {
@@ -438,6 +441,50 @@
             .console {
                 height: 150px;
                 font-size: 0.75rem;
+            }
+            
+            /* Date Range Slider Mobile Fixes */
+            .date-range-container {
+                padding: 1rem;
+                margin-left: 0;
+                margin-right: 0;
+            }
+            
+            .slider-container {
+                padding: 0 5px;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            .range-slider {
+                width: 100%;
+                max-width: 100%;
+                overflow: hidden;
+            }
+            
+            .slider-track {
+                width: calc(100% - 20px);
+                max-width: calc(100% - 20px);
+            }
+            
+            .slider-range {
+                max-width: calc(100% - 20px);
+            }
+            
+            .preset-buttons {
+                gap: 0.25rem;
+            }
+            
+            .preset-btn {
+                padding: 0.3rem 0.6rem;
+                font-size: 0.75rem;
+                flex: 1;
+                min-width: 0;
+            }
+            
+            .date-labels {
+                font-size: 0.7rem;
+                padding: 0 5px;
             }
         }
     </style>
@@ -864,17 +911,30 @@
             if (!thumbLeft || !thumbRight || !currentData.length) return;
             
             let isDragging = null;
-            const trackWidth = sliderTrack.offsetWidth - 20;
+            let trackWidth = sliderTrack.offsetWidth - 20;
+            
+            // Recalculate track width on window resize
+            const updateTrackWidth = () => {
+                trackWidth = sliderTrack.offsetWidth - 20;
+            };
+            
+            window.addEventListener('resize', updateTrackWidth);
+            window.addEventListener('orientationchange', () => {
+                setTimeout(updateTrackWidth, 100);
+            });
             
             function updateSliderPosition() {
-                const leftPos = (sliderMin / 100) * trackWidth;
-                const rightPos = (sliderMax / 100) * trackWidth;
+                // Ensure we have current track width
+                trackWidth = sliderTrack.offsetWidth - 20;
+                
+                const leftPos = Math.max(0, Math.min(trackWidth, (sliderMin / 100) * trackWidth));
+                const rightPos = Math.max(0, Math.min(trackWidth, (sliderMax / 100) * trackWidth));
                 
                 thumbLeft.style.left = leftPos + 'px';
                 thumbRight.style.left = rightPos + 'px';
                 
                 sliderRange.style.left = leftPos + 'px';
-                sliderRange.style.width = (rightPos - leftPos) + 'px';
+                sliderRange.style.width = Math.max(0, (rightPos - leftPos)) + 'px';
                 
                 filterDataByRange();
             }
